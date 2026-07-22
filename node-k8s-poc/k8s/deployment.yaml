@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: node-k8s-deployment
+spec:
+  replicas: 2 # Kubernetes should maintain 2 Pods
+  selector:
+    matchLabels:
+      app: node-k8s
+  template:
+    metadata:
+      labels:
+        app: node-k8s
+    spec:
+      containers:
+        - name: node-k8s-container
+          image: node-k8s-poc:1.0 # tells Kubernetes which Docker image to run
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
