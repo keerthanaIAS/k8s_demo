@@ -9,7 +9,10 @@ spec:
     - protocol: TCP
       port: 3000
       targetPort: 3000
-  type: ClusterIP
+      # nodePort: 30080 # declared this for NodePort
+  type: ClusterIP # temporary tunnel from your Mac into the Service ----- You don't need LoadBalancer + NodePort + Ingress simultaneously for this local architecture. Ingress is the entry point, and the Service behind it can simply be ClusterIP
+  # type: NodePort # we can exposes a Service outside the cluster
+  # type: LoadBalancer
 
 
 # Service
@@ -32,3 +35,67 @@ spec:
 #         ↓
 # Node.js:3000
 
+# After i declared nodeport and the commands:
+# keerthana@Mac node-k8s-poc % kubectl get endpoints node-k8s-service
+# NAME               ENDPOINTS                       AGE
+# node-k8s-service   10.1.0.54:3000,10.1.0.56:3000   3h51m
+# keerthana@Mac node-k8s-poc % kubectl apply -f k8s/service.yaml
+# service/node-k8s-service configured
+# keerthana@Mac node-k8s-poc % kubectl get service node-k8s-service
+# NAME               TYPE       CLUSTER-IP       EXTERNAL-IP   PORT(S)          AGE
+# node-k8s-service   NodePort   10.109.118.109   <none>        3000:30080/TCP   4h1m
+# keerthana@Mac node-k8s-poc % 
+
+# i can access the localhost:3000 without following kubectl port-forward                                          --->important
+
+# after Your current flow is now:
+# Browser / curl
+#       │
+#       │ http://localhost:30080
+#       ▼
+# Kubernetes NodePort :30080
+#       │
+#       ▼
+# Service :3000
+#       │
+#       ├── Pod 1 :3000
+#       └── Pod 2 :3000
+
+# You no longer need:
+# kubectl port-forward
+
+# Next: LoadBalancer
+#-----------------------
+# removed nodePort then given loadbalancer
+
+# On Docker Desktop, you may see:
+# TYPE           EXTERNAL-IP
+# LoadBalancer   localhost
+
+# curl http://localhost:3000 is working
+# The important thing to understand is that in your local Docker Desktop cluster, 
+# LoadBalancer is a local simulation/implementation rather than a real cloud load balancer like AWS ELB or Azure Load Balancer.
+
+# The architecture becomes:
+# Browser
+#    │
+#    │ localhost:3000
+#    ▼
+# LoadBalancer Service
+#    │
+#    ▼
+# Pod 1 ──┐
+#         ├── Node.js
+# Pod 2 ──┘
+
+# changed type again to cluster:
+# ------------------------------
+# Ingress is the entry point, and the Service behind it can simply be ClusterIP.
+# node-k8s.local
+#       ↓
+#    Ingress
+#       ↓
+#  ClusterIP Service
+#       ↓
+#  ┌────┴────┐
+# Pod 1     Pod 2

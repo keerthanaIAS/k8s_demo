@@ -1,0 +1,171 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: node-k8s-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: node-k8s.local # When someone requests node-k8s.local, send the request to node-k8s-service.
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: node-k8s-service
+                port:
+                  number: 3000
+
+# Step 1 — Install NGINX Ingress Controller
+
+# Run:
+
+# kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
+
+# Wait for it to start:
+
+# kubectl get pods -n ingress-nginx
+
+# You want to see:
+
+# ingress-nginx-controller-xxxxx   1/1   Running
+
+# Check the Service:
+
+# kubectl get service -n ingress-nginx
+
+# You should see the Ingress Controller.
+
+# Step 2 — Verify IngressClass
+
+# Run:
+
+# kubectl get ingressclass
+
+# You should now see something similar to:
+
+# NAME    CONTROLLER
+# nginx   k8s.io/ingress-nginx
+# Step 3 — Create Ingress YAML
+
+# Create:
+
+# touch k8s/ingress.yaml
+
+# Put this inside:
+
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: node-k8s-ingress
+# spec:
+#   ingressClassName: nginx
+#   rules:
+#     - host: node-k8s.local
+#       http:
+#         paths:
+#           - path: /
+#             pathType: Prefix
+#             backend:
+#               service:
+#                 name: node-k8s-service
+#                 port:
+#                   number: 3000
+
+# Notice:
+
+# host: node-k8s.local
+
+# This means:
+
+# When someone requests node-k8s.local, send the request to node-k8s-service.
+
+# Step 4 — Apply Ingress
+
+# Run:
+
+# kubectl apply -f k8s/ingress.yaml
+
+# Check:
+
+# kubectl get ingress
+
+# You should see:
+
+# NAME               CLASS   HOSTS            ADDRESS
+# node-k8s-ingress   nginx   node-k8s.local
+# Step 5 — Map the domain to localhost
+
+# Your Mac doesn't automatically know that:
+
+# node-k8s.local
+
+# means:
+
+# 127.0.0.1
+
+# So edit your hosts file:
+
+# sudo nano /etc/hosts
+
+# Add this line:
+
+# 127.0.0.1 node-k8s.local
+
+# Save:
+
+# Ctrl + O
+# Enter
+# Ctrl + X
+
+# Verify:
+
+# cat /etc/hosts
+
+# You should see:
+
+# 127.0.0.1 node-k8s.local
+# Step 6 — Test the domain
+
+# Run:
+
+# curl http://node-k8s.local
+
+# Expected:
+
+# {
+#   "message": "Hello from Node.js Kubernetes POC",
+#   "version": "1.0.0"
+# }
+
+# Your final local Kubernetes architecture
+
+# You now have:
+
+#                          Browser
+#                             │
+#                             │
+#                  http://node-k8s.local
+#                             │
+#                             ▼
+#                  /etc/hosts
+#                  127.0.0.1
+#                             │
+#                             ▼
+#                 NGINX Ingress Controller
+#                             │
+#                             ▼
+#                    Ingress Rule
+#                  node-k8s.local
+#                             │
+#                             ▼
+#                   node-k8s-service
+#                        Service
+#                             │
+#                     ┌───────┴───────┐
+#                     ▼               ▼
+#                   Pod 1           Pod 2
+#                     │               │
+#                     └───────┬───────┘
+#                             ▼
+#                        Node.js App
