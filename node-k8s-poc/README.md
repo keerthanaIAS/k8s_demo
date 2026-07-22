@@ -917,3 +917,28 @@ NodePort = expose through a node port
 LoadBalancer = expose through an external load balancer
 Ingress = HTTP/HTTPS routing using domains and paths
 
+##### The correct flow is:
+1. Docker
+   Build Docker image
+        ↓
+   Docker Image
+        ↓
+2. Kubernetes Deployment
+   Uses that image
+        ↓
+   Creates and manages Pods
+        ↓
+3. Pods
+   Run your Node.js application
+        ↓
+4. Service
+   Provides stable networking
+   and routes traffic to Pods
+        ↓
+5. Ingress
+   Uses the Service to route
+   external HTTP/HTTPS requests
+   based on domain/path
+        ↓
+6. Browser
+   http://node-k8s.local
