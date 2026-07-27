@@ -3,189 +3,254 @@ pipeline {
     agent any
 
     environment {
+
         PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
         DOCKER_USERNAME = 'YOUR_DOCKERHUB_USERNAME'
+
         USER_IMAGE = "${DOCKER_USERNAME}/user-service"
+
         ORDER_IMAGE = "${DOCKER_USERNAME}/order-service"
+
         IMAGE_TAG = "${BUILD_NUMBER}"
     }
 
     stages {
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
 
         stage('Debug Workspace') {
+
             steps {
+
                 sh '''
                     echo "Current directory:"
                     pwd
 
-                    echo "Root files:"
+                    echo "Root:"
                     ls -la
 
-                    echo "User service files:"
-                    ls -la user-service
+                    echo "Microservices POC:"
+                    ls -la microservices-poc
 
-                    echo "Order service files:"
-                    ls -la order-service
+                    echo "User Service:"
+                    ls -la microservices-poc/user-service
 
-                    echo "User package lock:"
-                    ls -l user-service/package-lock.json
-
-                    echo "Order package lock:"
-                    ls -l order-service/package-lock.json
-
-                    echo "Git commit:"
-                    git rev-parse HEAD
+                    echo "Order Service:"
+                    ls -la microservices-poc/order-service
                 '''
             }
         }
 
         stage('Test User Service') {
+
             steps {
-                dir('user-service') {
+
+                dir('microservices-poc/user-service') {
+
                     sh 'npm ci'
+
                     sh 'npm test'
+
                 }
             }
         }
 
         stage('Test Order Service') {
+
             steps {
-                dir('order-service') {
+
+                dir('microservices-poc/order-service') {
+
                     sh 'npm ci'
+
                     sh 'npm test'
+
                 }
             }
         }
 
         stage('Build User Docker Image') {
+
             steps {
+
                 sh """
                     docker build \
-                        -t ${USER_IMAGE}:${IMAGE_TAG} \
-                        ./user-service
+                    -t ${USER_IMAGE}:${IMAGE_TAG} \
+                    ./microservices-poc/user-service
                 """
             }
         }
 
         stage('Build Order Docker Image') {
+
             steps {
+
                 sh """
                     docker build \
-                        -t ${ORDER_IMAGE}:${IMAGE_TAG} \
-                        ./order-service
+                    -t ${ORDER_IMAGE}:${IMAGE_TAG} \
+                    ./microservices-poc/order-service
                 """
             }
         }
 
         stage('Docker Login') {
+
             steps {
+
                 withCredentials([
                     usernamePassword(
-                        credentialsId: 'dockerhub-credentials',
+                        credentialsId: 'docker-hub-credentials',
                         usernameVariable: 'DOCKER_USER',
                         passwordVariable: 'DOCKER_PASSWORD'
                     )
                 ]) {
+
                     sh """
                         echo "${DOCKER_PASSWORD}" |
                         docker login \
-                            -u "${DOCKER_USER}" \
-                            --password-stdin
+                        -u "${DOCKER_USER}" \
+                        --password-stdin
                     """
-
                 }
             }
         }
 
         stage('Push Docker Images') {
+
             steps {
+
                 sh """
-                    docker push ${USER_IMAGE}:${IMAGE_TAG}
+                    docker push \
+                    ${USER_IMAGE}:${IMAGE_TAG}
                 """
+
                 sh """
-                    docker push ${ORDER_IMAGE}:${IMAGE_TAG}
+                    docker push \
+                    ${ORDER_IMAGE}:${IMAGE_TAG}
                 """
             }
         }
 
         stage('Deploy Kubernetes Infrastructure') {
+
             steps {
+
                 sh """
-                    kubectl apply -f k8s/namespace.yaml
-                    kubectl apply -f k8s/mongodb/
-                    kubectl apply -f k8s/kafka/
-                    kubectl apply -f k8s/user-service/
-                    kubectl apply -f k8s/order-service/
-                    kubectl apply -f k8s/ingress.yaml
+
+                    kubectl apply \
+                    -f microservices-poc/k8s/namespace.yaml
+
+                    kubectl apply \
+                    -f microservices-poc/k8s/mongodb/
+
+                    kubectl apply \
+                    -f microservices-poc/k8s/kafka/
+
+                    kubectl apply \
+                    -f microservices-poc/k8s/user-service/
+
+                    kubectl apply \
+                    -f microservices-poc/k8s/order-service/
+
+                    kubectl apply \
+                    -f microservices-poc/k8s/ingress.yaml
+
                 """
             }
         }
 
         stage('Rolling Update User Service') {
+
             steps {
+
                 sh """
+
                     kubectl set image \
-                        deployment/user-service \
-                        user-service=${USER_IMAGE}:${IMAGE_TAG} \
-                        -n microservices-poc
+                    deployment/user-service \
+                    user-service=${USER_IMAGE}:${IMAGE_TAG} \
+                    -n microservices-poc
+
                 """
             }
         }
 
         stage('Rolling Update Order Service') {
+
             steps {
+
                 sh """
+
                     kubectl set image \
-                        deployment/order-service \
-                        order-service=${ORDER_IMAGE}:${IMAGE_TAG} \
-                        -n microservices-poc
+                    deployment/order-service \
+                    order-service=${ORDER_IMAGE}:${IMAGE_TAG} \
+                    -n microservices-poc
+
                 """
             }
         }
 
         stage('Wait for User Service') {
+
             steps {
+
                 sh """
+
                     kubectl rollout status \
-                        deployment/user-service \
-                        -n microservices-poc
+                    deployment/user-service \
+                    -n microservices-poc
+
                 """
             }
         }
 
         stage('Wait for Order Service') {
+
             steps {
+
                 sh """
+
                     kubectl rollout status \
-                        deployment/order-service \
-                        -n microservices-poc
+                    deployment/order-service \
+                    -n microservices-poc
+
                 """
             }
         }
 
         stage('Verify Deployment') {
+
             steps {
+
                 sh """
-                    kubectl get deployments -n microservices-poc
-                    kubectl get pods -n microservices-poc
-                    kubectl get services -n microservices-poc
-                    kubectl get ingress -n microservices-poc
+
+                    kubectl get deployments \
+                    -n microservices-poc
+
+                    kubectl get pods \
+                    -n microservices-poc
+
+                    kubectl get services \
+                    -n microservices-poc
+
+                    kubectl get ingress \
+                    -n microservices-poc
+
                 """
             }
         }
     }
 
     post {
+
         success {
+
             echo 'CI/CD Pipeline completed successfully'
+
         }
+
         failure {
+
             echo 'CI/CD Pipeline failed'
+
         }
     }
 }
