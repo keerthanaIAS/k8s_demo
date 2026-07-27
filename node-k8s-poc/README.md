@@ -942,3 +942,164 @@ Ingress = HTTP/HTTPS routing using domains and paths
         ↓
 6. Browser
    http://node-k8s.local
+
+
+# To stop the pod in docker container:
+------------------------------------------------------------------------------
+## stop deployment pods:-
+keerthana@Mac-34 node-k8s-poc % kubectl delete deployment node-k8s-deployment
+deployment.apps "node-k8s-deployment" deleted
+keerthana@Mac-34 node-k8s-poc % kubectl get pods
+No resources found in default namespace.
+keerthana@Mac-34 node-k8s-poc % 
+
+## Delete the Ingress Controller:-
+# Check if ingress-nginx is installed as a service
+kubectl get all -n ingress-nginx
+
+# Delete the ingress controller
+kubectl delete -n ingress-nginx deployment ingress-nginx-controller
+
+*don't do this two steps untill you need this otherwise ingress will be deleted*
+--------------------------------------------------------------------------------
+# OR if you installed it via helm
+helm uninstall ingress-nginx -n ingress-nginx
+
+# OR if you installed it via manifest
+kubectl delete -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.1/deploy/static/provider/cloud/deploy.yaml
+
+## Delete the Kubernetes Namespace:-
+# Delete the entire ingress-nginx namespace
+kubectl delete namespace ingress-nginx
+
+# Verify it's gone
+kubectl get namespaces
+
+## Stop Minikube (If Using Minikube):-
+# Stop Minikube - this stops everything
+minikube stop
+
+# If you want to delete everything
+minikube delete
+
+# If you enabled the ingress addon in minikube
+minikube addons disable ingress
+
+## Stop the Container Directly:-
+# Stop the container
+docker stop 17729dc48ebd
+
+# Remove it
+docker rm 17729dc48ebd
+
+## How to Check What's Running:-
+# Check all namespaces
+kubectl get pods --all-namespaces
+
+# Check ingress namespace specifically
+kubectl get pods -n ingress-nginx
+
+# Check all Docker containers
+docker ps
+
+# Check all Docker containers (including stopped)
+docker ps -a
+
+## Complete Cleanup Commands:-
+# 1. Delete ingress controller
+kubectl delete -n ingress-nginx deployment ingress-nginx-controller
+
+# 2. Delete the namespace (if you want)
+kubectl delete namespace ingress-nginx
+
+# 3. Stop any remaining Docker containers
+docker stop $(docker ps -q) 2>/dev/null
+
+# 4. Verify nothing is running
+docker ps
+kubectl get pods --all-namespaces
+
+### Quick One-Liner to Remove Everything:
+kubectl delete -n ingress-nginx deployment ingress-nginx-controller && docker stop 17729dc48ebd 2>/dev/null && docker rm 17729dc48ebd 2>/dev/null
+-------------------------------------------------------------------------------
+
+# If want to start command:
+kubectl apply -f deployment.yaml
+kubectl apply -f service.yaml
+kubectl apply -f ingress.yaml
+
+
+
+
+# Starting step:
+docker build -t node-k8s-poc:1.0 .
+docker images
+kubectl get nodes
+kubectl apply -f k8s/deployment.yaml
+kubectl get deployments
+kubectl get pods
+kubectl apply -f k8s/service.yaml
+kubectl get service
+kubectl get endpoints node-k8s-service
+kubectl port-forward service/node-k8s-service 3000:3000 ->test service
+
+
+------------------------------------------------------------------------------------------------------------------------------------
+# Master processes:
+# API Server:
+
+## Check the API Server endpoint - terminal log:
+keerthana@Mac-34 node-k8s-poc % kubectl cluster-info
+Kubernetes control plane is running at https://127.0.0.1:6443
+CoreDNS is running at https://127.0.0.1:6443/api/v1/namespaces/kube-system/services/kube-dns:dns/proxy
+
+To further debug and diagnose cluster problems, use 'kubectl cluster-info dump'.
+*That address is the Kubernetes API Server endpoint.*
+* Your flow is:
+kubectl
+   │
+   │ Kubernetes API request
+   ▼
+API Server
+   │
+   ▼
+Kubernetes Cluster
+
+## Directly query the API Server:
+keerthana@Mac-34 node-k8s-poc % kubectl get --raw="/version"
+{
+  "major": "1",
+  "minor": "32",
+  "gitVersion": "v1.32.2",
+  "gitCommit": "67a30c0adcf52bd3f56ff0893ce19966be12991f",
+  "gitTreeState": "clean",
+  "buildDate": "2025-02-12T21:19:47Z",
+  "goVersion": "go1.23.6",
+  "compiler": "gc",
+  "platform": "linux/arm64"
+}
+*This is a direct API request.*
+* You are essentially saying:
+"API Server, give me the Kubernetes cluster version."
+
+*what we give kubectl command that go to the api server then we get right*                                 --->*important notes*
+
+* Your flow is:
+You
+ │
+ │ kubectl get pods
+ ▼
+API Server
+ │
+ │ processes the request
+ ▼
+Kubernetes cluster state
+ │
+ ▼
+API Server
+ │
+ ▼
+kubectl
+ │
+ ▼
+You see the result
