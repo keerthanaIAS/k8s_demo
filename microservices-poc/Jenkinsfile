@@ -17,6 +17,33 @@ pipeline {
             }
         }
 
+        stage('Debug Workspace') {
+            steps {
+                sh '''
+                    echo "Current directory:"
+                    pwd
+
+                    echo "Root files:"
+                    ls -la
+
+                    echo "User service files:"
+                    ls -la user-service
+
+                    echo "Order service files:"
+                    ls -la order-service
+
+                    echo "User package lock:"
+                    ls -l user-service/package-lock.json
+
+                    echo "Order package lock:"
+                    ls -l order-service/package-lock.json
+
+                    echo "Git commit:"
+                    git rev-parse HEAD
+                '''
+            }
+        }
+
         stage('Test User Service') {
             steps {
                 dir('user-service') {
@@ -38,9 +65,9 @@ pipeline {
         stage('Build User Docker Image') {
             steps {
                 sh """
-                docker build \
-                -t ${USER_IMAGE}:${IMAGE_TAG} \
-                ./user-service
+                    docker build \
+                        -t ${USER_IMAGE}:${IMAGE_TAG} \
+                        ./user-service
                 """
             }
         }
@@ -48,9 +75,9 @@ pipeline {
         stage('Build Order Docker Image') {
             steps {
                 sh """
-                docker build \
-                -t ${ORDER_IMAGE}:${IMAGE_TAG} \
-                ./order-service
+                    docker build \
+                        -t ${ORDER_IMAGE}:${IMAGE_TAG} \
+                        ./order-service
                 """
             }
         }
@@ -64,12 +91,11 @@ pipeline {
                         passwordVariable: 'DOCKER_PASSWORD'
                     )
                 ]) {
-
                     sh """
-                    echo "${DOCKER_PASSWORD}" |
-                    docker login \
-                    -u "${DOCKER_USER}" \
-                    --password-stdin
+                        echo "${DOCKER_PASSWORD}" |
+                        docker login \
+                            -u "${DOCKER_USER}" \
+                            --password-stdin
                     """
 
                 }
@@ -79,13 +105,10 @@ pipeline {
         stage('Push Docker Images') {
             steps {
                 sh """
-                docker push \
-                ${USER_IMAGE}:${IMAGE_TAG}
+                    docker push ${USER_IMAGE}:${IMAGE_TAG}
                 """
-
                 sh """
-                docker push \
-                ${ORDER_IMAGE}:${IMAGE_TAG}
+                    docker push ${ORDER_IMAGE}:${IMAGE_TAG}
                 """
             }
         }
@@ -93,18 +116,12 @@ pipeline {
         stage('Deploy Kubernetes Infrastructure') {
             steps {
                 sh """
-                kubectl apply \
-                -f k8s/namespace.yaml
-                kubectl apply \
-                -f k8s/mongodb/
-                kubectl apply \
-                -f k8s/kafka/
-                kubectl apply \
-                -f k8s/user-service/
-                kubectl apply \
-                -f k8s/order-service/
-                kubectl apply \
-                -f k8s/ingress.yaml
+                    kubectl apply -f k8s/namespace.yaml
+                    kubectl apply -f k8s/mongodb/
+                    kubectl apply -f k8s/kafka/
+                    kubectl apply -f k8s/user-service/
+                    kubectl apply -f k8s/order-service/
+                    kubectl apply -f k8s/ingress.yaml
                 """
             }
         }
@@ -112,10 +129,10 @@ pipeline {
         stage('Rolling Update User Service') {
             steps {
                 sh """
-                kubectl set image \
-                deployment/user-service \
-                user-service=${USER_IMAGE}:${IMAGE_TAG} \
-                -n microservices-poc
+                    kubectl set image \
+                        deployment/user-service \
+                        user-service=${USER_IMAGE}:${IMAGE_TAG} \
+                        -n microservices-poc
                 """
             }
         }
@@ -123,10 +140,10 @@ pipeline {
         stage('Rolling Update Order Service') {
             steps {
                 sh """
-                kubectl set image \
-                deployment/order-service \
-                order-service=${ORDER_IMAGE}:${IMAGE_TAG} \
-                -n microservices-poc
+                    kubectl set image \
+                        deployment/order-service \
+                        order-service=${ORDER_IMAGE}:${IMAGE_TAG} \
+                        -n microservices-poc
                 """
             }
         }
@@ -134,9 +151,9 @@ pipeline {
         stage('Wait for User Service') {
             steps {
                 sh """
-                kubectl rollout status \
-                deployment/user-service \
-                -n microservices-poc
+                    kubectl rollout status \
+                        deployment/user-service \
+                        -n microservices-poc
                 """
             }
         }
@@ -144,9 +161,9 @@ pipeline {
         stage('Wait for Order Service') {
             steps {
                 sh """
-                kubectl rollout status \
-                deployment/order-service \
-                -n microservices-poc
+                    kubectl rollout status \
+                        deployment/order-service \
+                        -n microservices-poc
                 """
             }
         }
@@ -154,14 +171,10 @@ pipeline {
         stage('Verify Deployment') {
             steps {
                 sh """
-                kubectl get deployments \
-                -n microservices-poc
-                kubectl get pods \
-                -n microservices-poc
-                kubectl get services \
-                -n microservices-poc
-                kubectl get ingress \
-                -n microservices-poc
+                    kubectl get deployments -n microservices-poc
+                    kubectl get pods -n microservices-poc
+                    kubectl get services -n microservices-poc
+                    kubectl get ingress -n microservices-poc
                 """
             }
         }
