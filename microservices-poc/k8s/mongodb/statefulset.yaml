@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+  namespace: microservices-poc
+spec:
+  serviceName: mongodb
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: mongodb
+
+  template:
+    metadata:
+      labels:
+        app: mongodb
+
+    spec:
+      containers:
+        - name: mongodb
+          image: mongo:8.0
+
+          ports:
+            - containerPort: 27017
+              name: mongodb
+
+          volumeMounts:
+            - name: mongodb-data
+              mountPath: /data/db
+
+  volumeClaimTemplates: # automatically creates a PVC for the StatefulSet.
+    - metadata:
+        name: mongodb-data
+
+      spec:
+        accessModes:
+          - ReadWriteOnce
+
+        resources:
+          requests:
+            storage: 1Gi
+
+# The relationship is:
+# --------------------
+# StatefulSet
+#       │
+#       ▼ 
+# mongodb-0
+#       │
+#       │ volumeMount
+#       ▼
+# mongodb-data PVC
+#       │
+#       ▼
+# Persistent Volume
+
+# The actual MongoDB data is stored at:
+# -------------------------------------
+# /data/db
+# inside the container.
+

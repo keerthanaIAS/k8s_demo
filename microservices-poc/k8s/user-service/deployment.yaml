@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: microservices-poc
+
+spec:
+  replicas: 2
+
+  selector:
+    matchLabels:
+      app: user-service
+
+  template:
+    metadata:
+      labels:
+        app: user-service
+
+    spec:
+      containers:
+        - name: user-service
+
+          image: YOUR_DOCKERHUB_USERNAME/user-service:latest
+          imagePullPolicy: Always
+
+          ports:
+            - containerPort: 3000
+
+          env:
+            - name: MONGO_URL
+              value: "mongodb://mongodb:27017"
+
+            - name: KAFKA_BROKER
+              value: "kafka-0.kafka:9092"
+
+            - name: ORDER_SERVICE_URL
+              value: "http://order-service:3001"
+
+# The important part is:
+
+# ORDER_SERVICE_URL
+
+# Kubernetes DNS resolves:
+
+# order-service
+
+# to the ClusterIP Service.
+
+# So:
+
+# user-service Pod
+#        │
+#        │ http://order-service:3001
+#        ▼
+# Kubernetes DNS
+#        │
+#        ▼
+# order-service Service
+#        │
+#        ├── order Pod 1
+#        │
+#        └── order Pod 2

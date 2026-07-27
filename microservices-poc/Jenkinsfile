@@ -1,0 +1,250 @@
+pipeline {
+
+    agent any
+
+    environment {
+
+        DOCKER_USERNAME = 'YOUR_DOCKERHUB_USERNAME'
+
+        USER_IMAGE = "${DOCKER_USERNAME}/user-service"
+
+        ORDER_IMAGE = "${DOCKER_USERNAME}/order-service"
+
+        IMAGE_TAG = "${BUILD_NUMBER}"
+    }
+
+    stages {
+
+        stage('Checkout') {
+
+            steps {
+
+                checkout scm
+
+            }
+        }
+
+        stage('Test User Service') {
+
+            steps {
+
+                dir('user-service') {
+
+                    sh 'npm ci'
+
+                    sh 'npm test'
+
+                }
+            }
+        }
+
+        stage('Test Order Service') {
+
+            steps {
+
+                dir('order-service') {
+
+                    sh 'npm ci'
+
+                    sh 'npm test'
+
+                }
+            }
+        }
+
+        stage('Build User Docker Image') {
+
+            steps {
+
+                sh """
+                docker build \
+                -t ${USER_IMAGE}:${IMAGE_TAG} \
+                ./user-service
+                """
+
+            }
+        }
+
+        stage('Build Order Docker Image') {
+
+            steps {
+
+                sh """
+                docker build \
+                -t ${ORDER_IMAGE}:${IMAGE_TAG} \
+                ./order-service
+                """
+
+            }
+        }
+
+        stage('Docker Login') {
+
+            steps {
+
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-credentials',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASSWORD'
+                    )
+                ]) {
+
+                    sh """
+                    echo "${DOCKER_PASSWORD}" |
+                    docker login \
+                    -u "${DOCKER_USER}" \
+                    --password-stdin
+                    """
+
+                }
+            }
+        }
+
+        stage('Push Docker Images') {
+
+            steps {
+
+                sh """
+                docker push \
+                ${USER_IMAGE}:${IMAGE_TAG}
+                """
+
+                sh """
+                docker push \
+                ${ORDER_IMAGE}:${IMAGE_TAG}
+                """
+
+            }
+        }
+
+        stage('Deploy Kubernetes Infrastructure') {
+
+            steps {
+
+                sh """
+
+                kubectl apply \
+                -f k8s/namespace.yaml
+
+                kubectl apply \
+                -f k8s/mongodb/
+
+                kubectl apply \
+                -f k8s/kafka/
+
+                kubectl apply \
+                -f k8s/user-service/
+
+                kubectl apply \
+                -f k8s/order-service/
+
+                kubectl apply \
+                -f k8s/ingress.yaml
+
+                """
+
+            }
+        }
+
+        stage('Rolling Update User Service') {
+
+            steps {
+
+                sh """
+
+                kubectl set image \
+                deployment/user-service \
+                user-service=${USER_IMAGE}:${IMAGE_TAG} \
+                -n microservices-poc
+
+                """
+
+            }
+        }
+
+        stage('Rolling Update Order Service') {
+
+            steps {
+
+                sh """
+
+                kubectl set image \
+                deployment/order-service \
+                order-service=${ORDER_IMAGE}:${IMAGE_TAG} \
+                -n microservices-poc
+
+                """
+
+            }
+        }
+
+        stage('Wait for User Service') {
+
+            steps {
+
+                sh """
+
+                kubectl rollout status \
+                deployment/user-service \
+                -n microservices-poc
+
+                """
+
+            }
+        }
+
+        stage('Wait for Order Service') {
+
+            steps {
+
+                sh """
+
+                kubectl rollout status \
+                deployment/order-service \
+                -n microservices-poc
+
+                """
+
+            }
+        }
+
+        stage('Verify Deployment') {
+
+            steps {
+
+                sh """
+
+                kubectl get deployments \
+                -n microservices-poc
+
+                kubectl get pods \
+                -n microservices-poc
+
+                kubectl get services \
+                -n microservices-poc
+
+                kubectl get ingress \
+                -n microservices-poc
+
+                """
+
+            }
+        }
+    }
+
+    post {
+
+        success {
+
+            echo 'CI/CD Pipeline completed successfully'
+
+        }
+
+        failure {
+
+            echo 'CI/CD Pipeline failed'
+
+        }
+    }
+}

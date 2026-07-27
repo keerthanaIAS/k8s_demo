@@ -1,0 +1,14 @@
+{
+  "name": "order-service",
+  "version": "1.0.0",
+  "description": "Order microservice for Kubernetes POC",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "kafkajs": "^2.2.4",
+    "mongodb": "^7.5.0"
+  }
+}
