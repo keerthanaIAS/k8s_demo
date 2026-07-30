@@ -20,7 +20,7 @@ spec:
       containers:
         - name: order-service
 
-          image: YOUR_DOCKERHUB_USERNAME/order-service:latest
+          image: keerthanalp/order-service:10
           imagePullPolicy: Always
 
           ports:

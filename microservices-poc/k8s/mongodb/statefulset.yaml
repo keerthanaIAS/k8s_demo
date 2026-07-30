@@ -1,11 +1,11 @@
 apiVersion: apps/v1
-kind: StatefulSet
+kind: StatefulSet # A StatefulSet is used when workloads need stable identity and/or persistent storage.
 metadata:
   name: mongodb
   namespace: microservices-poc
 spec:
   serviceName: mongodb
-  replicas: 1
+  replicas: 1 # If mongodb-0 crashes, Kubernetes can recreate: mongodb-0
 
   selector:
     matchLabels:

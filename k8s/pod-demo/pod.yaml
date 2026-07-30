@@ -1,0 +1,27 @@
+apiVersion: v1 # Kubernetes API version being used
+kind: Pod # Type of Kubernetes resource
+
+metadata: # Metadata about the Pod
+  name: nginx-pod # name - Unique identifier for this Pod within the namespace
+
+spec: # Specification/desired state of the Pod ## Defines HOW the Pod should run (containers, volumes, etc.)
+  containers: # List of containers in this Pod 
+    - name: nginx # Pods can have multiple containers (sidecar pattern) ## name - Unique identifier for this container within the Pod
+      image: nginx:latest # Container image to use
+      ports: # Port the container listens on
+        - containerPort: 80 # Nginx default port is 80 (HTTP)
+
+# ┌─────────────────────────────────┐
+# │         POD: nginx-pod          │
+# │  ┌───────────────────────────┐  │
+# │  │   CONTAINER: nginx        │  │
+# │  │                           │  │
+# │  │   Image: nginx:latest     │  │
+# │  │   Port: 80 (listening)    │  │
+# │  │                           │  │
+# │  │   ┌───────────────────┐   │  │
+# │  │   │  Nginx Web Server │   │  │
+# │  │   │ (serves web pages)│   │  │
+# │  │   └───────────────────┘   │  │
+# │  └───────────────────────────┘  │
+# └─────────────────────────────────┘

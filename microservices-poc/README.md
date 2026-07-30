@@ -2796,3 +2796,1285 @@ The whole POC is now:
 ```
 
 This is the complete **Node.js Microservices + Kubernetes + Minikube + Lens + MongoDB StatefulSet + Kafka StatefulSet + Ingress + Jenkins CI/CD** POC.
+
+
+# Your current setup is:
+-----------------------
+Mac
+ │
+ │ 192.168.49.2:32315
+ │
+ X  TIMEOUT
+ │
+Minikube Docker Network
+
+*The 192.168.49.2 address is the IP of the Minikube node inside Docker's network. Your Mac cannot directly reach that NodePort in your current Docker-driver setup*.
+
+## With the tunnel:
+-------------------
+Browser
+   │
+   │ http://user-service.local
+   ▼
+/etc/hosts
+   │
+   │ 127.0.0.1
+   ▼
+minikube tunnel
+   │
+   ▼
+NGINX Ingress
+   │
+   │ Host: user-service.local
+   ▼
+user-service
+   │
+   ├── Pod 1
+   └── Pod 2
+
+And:
+------
+Browser
+   │
+   │ http://order-service.local
+   ▼
+/etc/hosts
+   │
+   │ 127.0.0.1
+   ▼
+minikube tunnel
+   │
+   ▼
+NGINX Ingress
+   │
+   │ Host: order-service.local
+   ▼
+order-service
+   │
+   ├── Pod 1
+   └── Pod 2
+
+### So you have two things to fix:
+----------------------------------
+minikube tunnel → *provides the local access path*.
+/etc/hosts → maps user-service.local and order-service.local to 127.0.0.1.
+
+Do those two steps, then run:
+-----------------------------
+curl -v http://user-service.local
+
+
+# Your goal is:
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Load Test
+    ↓
+Many HTTP requests
+    ↓
+User Service CPU increases
+    ↓
+HPA detects CPU increase
+    ↓
+HPA changes replicas
+    ↓
+Deployment creates more Pods
+    ↓
+Service distributes traffic
+    ↓
+Ingress routes external traffic
+keerthana@Mac-355 microservices-poc % kubectl get deployment user-service -n microservices-poc
+NAME           READY   UP-TO-DATE   AVAILABLE   AGE
+user-service   2/2     1            2           47h
+keerthana@Mac-355 microservices-poc % kubectl get pods -n microservices-poc -w
+NAME                             READY   STATUS             RESTARTS      AGE
+kafka-0                          1/1     Running            1 (23m ago)   45h
+mongodb-0                        1/1     Running            1 (23m ago)   45h
+order-service-69db8fd486-q6p7l   1/1     Running            1 (23m ago)   44h
+order-service-69db8fd486-shgx4   1/1     Running            2 (23m ago)   44h
+order-service-6f69c9d665-fvzmd   0/1     InvalidImageName   0             21m
+user-service-56cdc47b-jqxgt      0/1     InvalidImageName   0             21m
+user-service-f778f8767-rm94k     1/1     Running            1 (23m ago)   44h
+user-service-f778f8767-w7ks7     1/1     Running            1 (23m ago)   44h
+^C%                                                                                                                             
+keerthana@Mac-355 microservices-poc % kubectl get pods -n kube-system | grep metrics
+keerthana@Mac-355 microservices-poc % minikube addons enable metrics-server
+💡  metrics-server is an addon maintained by Kubernetes. For any concerns contact minikube on GitHub.
+You can view the list of minikube maintainers at: https://github.com/kubernetes/minikube/blob/master/OWNERS
+    ▪ Using image registry.k8s.io/metrics-server/metrics-server:v0.8.1
+🌟  The 'metrics-server' addon is enabled
+keerthana@Mac-355 microservices-poc % kubectl get pods -n kube-system | grep metrics
+metrics-server-9d74bb658-lk8xx     0/1     ContainerCreating   0             8s
+keerthana@Mac-355 microservices-poc % kubectl top pods -n microservices-poc
+error: Metrics API not available
+keerthana@Mac-355 microservices-poc % kubectl top pods -n microservices-poc
+error: Metrics API not available
+keerthana@Mac-355 microservices-poc % kubectl get pods -n kube-system -w
+NAME                               READY   STATUS    RESTARTS      AGE
+coredns-7d764666f9-8lpth           1/1     Running   1 (24m ago)   2d
+etcd-minikube                      1/1     Running   1 (24m ago)   2d
+kube-apiserver-minikube            1/1     Running   1 (24m ago)   2d
+kube-controller-manager-minikube   1/1     Running   1 (24m ago)   2d
+kube-proxy-p5v5k                   1/1     Running   1 (24m ago)   2d
+kube-scheduler-minikube            1/1     Running   1 (24m ago)   2d
+metrics-server-9d74bb658-lk8xx     0/1     Running   0             44s
+storage-provisioner                1/1     Running   3 (24m ago)   2d
+^C%                                                                                                                             
+keerthana@Mac-355 microservices-poc % kubectl top pods -n microservices-poc
+error: Metrics API not available
+keerthana@Mac-355 microservices-poc % kubectl get pods -n kube-system -w   
+NAME                               READY   STATUS    RESTARTS      AGE
+coredns-7d764666f9-8lpth           1/1     Running   1 (24m ago)   2d
+etcd-minikube                      1/1     Running   1 (24m ago)   2d
+kube-apiserver-minikube            1/1     Running   1 (24m ago)   2d
+kube-controller-manager-minikube   1/1     Running   1 (24m ago)   2d
+kube-proxy-p5v5k                   1/1     Running   1 (24m ago)   2d
+kube-scheduler-minikube            1/1     Running   1 (24m ago)   2d
+metrics-server-9d74bb658-lk8xx     0/1     Running   0             61s
+storage-provisioner                1/1     Running   3 (24m ago)   2d
+metrics-server-9d74bb658-lk8xx     1/1     Running   0             75s
+^C%                                                                                                                             
+keerthana@Mac-355 microservices-poc % kubectl top pods -n microservices-poc
+NAME                             CPU(cores)   MEMORY(bytes)   
+kafka-0                          27m          709Mi           
+mongodb-0                        10m          323Mi           
+order-service-69db8fd486-q6p7l   23m          71Mi            
+order-service-69db8fd486-shgx4   22m          73Mi            
+user-service-f778f8767-rm94k     3m           75Mi            
+user-service-f778f8767-w7ks7     3m           69Mi            
+keerthana@Mac-355 microservices-poc % kubectl get rs -n microservices-poc
+NAME                       DESIRED   CURRENT   READY   AGE
+order-service-5698c7ccb    0         0         0       45h
+order-service-5bdb98c5d8   0         0         0       47h
+order-service-69db8fd486   2         2         2       44h
+order-service-6f69c9d665   1         1         0       44h
+user-service-56cdc47b      1         1         0       44h
+user-service-5c9c895554    0         0         0       47h
+user-service-7c9979bc9f    0         0         0       45h
+user-service-f778f8767     2         2         2       44h
+keerthana@Mac-355 microservices-poc % kubectl get deployment user-service -n microservices-poc -o yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "5"
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"annotations":{},"name":"user-service","namespace":"microservices-poc"},"spec":{"replicas":2,"selector":{"matchLabels":{"app":"user-service"}},"template":{"metadata":{"labels":{"app":"user-service"}},"spec":{"containers":[{"env":[{"name":"MONGO_URL","value":"mongodb://mongodb:27017"},{"name":"KAFKA_BROKER","value":"kafka-0.kafka:9092"},{"name":"ORDER_SERVICE_URL","value":"http://order-service:3001"}],"image":"YOUR_DOCKERHUB_USERNAME/user-service:latest","imagePullPolicy":"Always","name":"user-service","ports":[{"containerPort":3000}]}]}}}}
+  creationTimestamp: "2026-07-27T07:32:05Z"
+  generation: 5
+  name: user-service
+  namespace: microservices-poc
+  resourceVersion: "18406"
+  uid: e1f73421-c8ff-4f9e-9f97-8bb67567fef2
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 2
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: user-service
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: user-service
+    spec:
+      containers:
+      - env:
+        - name: MONGO_URL
+          value: mongodb://mongodb:27017
+        - name: KAFKA_BROKER
+          value: kafka-0.kafka:9092
+        - name: ORDER_SERVICE_URL
+          value: http://order-service:3001
+        image: YOUR_DOCKERHUB_USERNAME/user-service:latest
+        imagePullPolicy: Always
+        name: user-service
+        ports:
+        - containerPort: 3000
+          protocol: TCP
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+status:
+  availableReplicas: 2
+  conditions:
+  - lastTransitionTime: "2026-07-29T06:31:13Z"
+    lastUpdateTime: "2026-07-29T06:31:13Z"
+    message: Deployment has minimum availability.
+    reason: MinimumReplicasAvailable
+    status: "True"
+    type: Available
+  - lastTransitionTime: "2026-07-29T06:42:57Z"
+    lastUpdateTime: "2026-07-29T06:42:57Z"
+    message: ReplicaSet "user-service-56cdc47b" has timed out progressing.
+    reason: ProgressDeadlineExceeded
+    status: "False"
+    type: Progressing
+  observedGeneration: 5
+  readyReplicas: 2
+  replicas: 3
+  terminatingReplicas: 0
+  unavailableReplicas: 1
+  updatedReplicas: 1
+keerthana@Mac-355 microservices-poc % 
+
+## after added resouces lines in the service.yaml file in user service:
+* The important hierarchy is:
+
+Deployment
+└── spec
+    └── template
+        └── spec
+            └── containers
+                └── resources
+                    ├── requests
+                    │   ├── cpu
+                    │   └── memory
+                    │
+                    └── limits
+                        ├── cpu
+                        └── memory
+
+keerthana@Mac-355 microservices-poc % kubectl apply -f k8s/user-service/deployment.yaml
+deployment.apps/user-service unchanged
+keerthana@Mac-355 microservices-poc % kubectl get deployment user-service -n microservices-poc
+NAME           READY   UP-TO-DATE   AVAILABLE   AGE
+user-service   2/2     1            2           47h
+keerthana@Mac-355 microservices-poc % kubectl apply -f k8s/user-service/hpa.yaml
+horizontalpodautoscaler.autoscaling/user-service-hpa created
+keerthana@Mac-355 microservices-poc % kubectl get hpa -n microservices-poc
+NAME               REFERENCE                 TARGETS              MINPODS   MAXPODS   REPLICAS   AGE
+user-service-hpa   Deployment/user-service   cpu: <unknown>/50%   2         10        0          8s
+keerthana@Mac-355 microservices-poc % kubectl get hpa -n microservices-poc
+NAME               REFERENCE                 TARGETS              MINPODS   MAXPODS   REPLICAS   AGE
+user-service-hpa   Deployment/user-service   cpu: <unknown>/50%   2         10        2          16s
+keerthana@Mac-355 microservices-poc % 
+
+### `hey` is simply not installed on your Mac. Install it, then run the load test.
+---------------------------------------------------------------------------------
+**Install `hey` with Homebrew**
+
+```bash
+brew install hey
+```
+
+Verify:
+
+```bash
+hey -help
+```
+
+Then start your load test:
+
+```bash
+hey -z 5m -c 50 http://user-service.local
+```
+
+Meaning:
+
+* `-z 5m` → run the test for **5 minutes**
+* `-c 50` → maintain **50 concurrent requests**
+* `http://user-service.local` → traffic goes through your **Ingress**
+
+While it runs, open separate terminals.
+
+**Terminal 1 — HPA:**
+
+```bash
+kubectl get hpa -n microservices-poc -w
+```
+
+**Terminal 2 — Pods:**
+
+```bash
+kubectl get pods -n microservices-poc -w
+```
+
+**Terminal 3 — CPU:**
+
+```bash
+kubectl top pods -n microservices-poc
+```
+
+You want to observe:
+
+```text
+hey
+ ↓
+Ingress
+ ↓
+user-service Service
+ ↓
+User Pods
+ ↓
+CPU increases
+ ↓
+Metrics Server
+ ↓
+HPA
+ ↓
+Deployment replica count increases
+ ↓
+New User Pods created
+```
+
+One important point: **50 concurrent requests may not be enough to trigger scaling** if your User Service responds very quickly. If the CPU stays low, that's not an HPA failure—the application simply isn't under enough CPU pressure. In that case, increase the concurrency, for example:
+
+```bash
+hey -z 5m -c 200 http://user-service.local
+```
+
+Start with `-c 50`, observe `kubectl top`, and increase gradually if CPU remains below your HPA target.
+
+#### The actual traffic flow was:
+---------------------------------
+hey
+ │
+ │ 50 concurrent requests
+ ▼
+user-service.local
+ │
+ ▼
+/etc/hosts
+ │
+ ▼
+127.0.0.1
+ │
+ ▼
+Minikube Tunnel
+ │
+ ▼
+NGINX Ingress
+ │
+ ▼
+user-service Service
+ │
+ ├──────────┬──────────┬──────────┬──────────┐
+ ▼          ▼          ▼          ▼          ▼
+Pod 1      Pod 2      Pod 3      Pod 4    ... Pod 8
+ │          │          │          │
+ └──────────┴──────────┴──────────┴──────────┘
+                 │
+                 ▼
+             Responses
+
+##### The HPA is responsible for deciding:
+ - "Do I need more Pods?"
+*The Deployment/ReplicaSet is responsible for creating those Pods*.                                                  -->*important notes*
+
+
+# New node creation:-
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+keerthana@Mac-355 microservices-poc % kubectl get nodes -o wide
+NAME       STATUS   ROLES           AGE    VERSION   INTERNAL-IP    EXTERNAL-IP   OS-IMAGE                         KERNEL-VERSION     CONTAINER-RUNTIME
+minikube   Ready    control-plane   2d2h   v1.35.1   192.168.49.2   <none>        Debian GNU/Linux 12 (bookworm)   6.10.14-linuxkit   docker://29.2.1
+keerthana@Mac-355 microservices-poc % minikube node add worker-1
+😄  Adding node m02 to cluster minikube as [worker]
+❗  Cluster was created without any CNI, adding a node to it might cause broken networking.
+👍  Starting "minikube-m02" worker node in "minikube" cluster
+🚜  Pulling base image v0.0.50 ...
+🔥  Creating docker container (CPUs=2, Memory=2200MB) ...
+🐳  Preparing Kubernetes v1.35.1 on Docker 29.2.1 ...
+🔎  Verifying Kubernetes components...
+🏄  Successfully added m02 to minikube!
+keerthana@Mac-355 microservices-poc % kubectl get nodes
+NAME           STATUS     ROLES           AGE    VERSION
+minikube       Ready      control-plane   2d2h   v1.35.1
+minikube-m02   NotReady   <none>          57s    v1.35.1
+keerthana@Mac-355 microservices-poc % kubectl get nodes
+NAME           STATUS     ROLES           AGE    VERSION
+minikube       Ready      control-plane   2d2h   v1.35.1
+minikube-m02   NotReady   <none>          5m1s   v1.35.1
+keerthana@Mac-355 microservices-poc % kubectl describe node minikube-m02
+Name:               minikube-m02
+Roles:              <none>
+Labels:             beta.kubernetes.io/arch=arm64
+                    beta.kubernetes.io/os=linux
+                    kubernetes.io/arch=arm64
+                    kubernetes.io/hostname=minikube-m02
+                    kubernetes.io/os=linux
+                    minikube.k8s.io/commit=c93a4cb9311efc66b90d33ea03f75f2c4120e9b0
+                    minikube.k8s.io/name=minikube
+                    minikube.k8s.io/primary=false
+                    minikube.k8s.io/updated_at=2026_07_29T14_44_31_0700
+                    minikube.k8s.io/version=v1.38.1
+Annotations:        node.alpha.kubernetes.io/ttl: 0
+                    volumes.kubernetes.io/controller-managed-attach-detach: true
+CreationTimestamp:  Wed, 29 Jul 2026 14:44:31 +0530
+Taints:             node.kubernetes.io/not-ready:NoExecute
+                    node.kubernetes.io/not-ready:NoSchedule
+Unschedulable:      false
+Lease:
+  HolderIdentity:  minikube-m02
+  AcquireTime:     <unset>
+  RenewTime:       Wed, 29 Jul 2026 14:50:49 +0530
+Conditions:
+  Type             Status  LastHeartbeatTime                 LastTransitionTime                Reason                       Message
+  ----             ------  -----------------                 ------------------                ------                       -------
+  MemoryPressure   False   Wed, 29 Jul 2026 14:49:58 +0530   Wed, 29 Jul 2026 14:44:31 +0530   KubeletHasSufficientMemory   kubelet has sufficient memory available
+  DiskPressure     False   Wed, 29 Jul 2026 14:49:58 +0530   Wed, 29 Jul 2026 14:44:31 +0530   KubeletHasNoDiskPressure     kubelet has no disk pressure
+  PIDPressure      False   Wed, 29 Jul 2026 14:49:58 +0530   Wed, 29 Jul 2026 14:44:31 +0530   KubeletHasSufficientPID      kubelet has sufficient PID available
+  Ready            False   Wed, 29 Jul 2026 14:49:58 +0530   Wed, 29 Jul 2026 14:44:31 +0530   KubeletNotReady              container runtime network not ready: NetworkReady=false reason:NetworkPluginNotReady message:docker: network plugin is not ready: cni config uninitialized
+Addresses:
+  InternalIP:  192.168.49.3
+  Hostname:    minikube-m02
+Capacity:
+  cpu:                10
+  ephemeral-storage:  474095688Ki
+  hugepages-1Gi:      0
+  hugepages-2Mi:      0
+  hugepages-32Mi:     0
+  hugepages-64Ki:     0
+  memory:             8025424Ki
+  pods:               110
+Allocatable:
+  cpu:                10
+  ephemeral-storage:  474095688Ki
+  hugepages-1Gi:      0
+  hugepages-2Mi:      0
+  hugepages-32Mi:     0
+  hugepages-64Ki:     0
+  memory:             8025424Ki
+  pods:               110
+System Info:
+  Machine ID:                 e366bd4b77b9d6be2d67552f69964f40
+  System UUID:                e366bd4b77b9d6be2d67552f69964f40
+  Boot ID:                    ed69f6e0-dbd3-4aad-8509-7cad38e7417d
+  Kernel Version:             6.10.14-linuxkit
+  OS Image:                   Debian GNU/Linux 12 (bookworm)
+  Operating System:           linux
+  Architecture:               arm64
+  Container Runtime Version:  docker://29.2.1
+  Kubelet Version:            v1.35.1
+  Kube-Proxy Version:         
+PodCIDR:                      10.244.1.0/24
+PodCIDRs:                     10.244.1.0/24
+Non-terminated Pods:          (1 in total)
+  Namespace                   Name                CPU Requests  CPU Limits  Memory Requests  Memory Limits  Age
+  ---------                   ----                ------------  ----------  ---------------  -------------  ---
+  kube-system                 kube-proxy-kkn8p    0 (0%)        0 (0%)      0 (0%)           0 (0%)         6m23s
+Allocated resources:
+  (Total limits may be over 100 percent, i.e., overcommitted.)
+  Resource           Requests  Limits
+  --------           --------  ------
+  cpu                0 (0%)    0 (0%)
+  memory             0 (0%)    0 (0%)
+  ephemeral-storage  0 (0%)    0 (0%)
+  hugepages-1Gi      0 (0%)    0 (0%)
+  hugepages-2Mi      0 (0%)    0 (0%)
+  hugepages-32Mi     0 (0%)    0 (0%)
+  hugepages-64Ki     0 (0%)    0 (0%)
+Events:
+  Type    Reason          Age    From             Message
+  ----    ------          ----   ----             -------
+  Normal  RegisteredNode  6m22s  node-controller  Node minikube-m02 event: Registered Node minikube-m02 in Controller
+keerthana@Mac-355 microservices-poc % kubectl get pods -A -o wide
+NAMESPACE           NAME                                        READY   STATUS      RESTARTS       AGE    IP             NODE           NOMINATED NODE   READINESS GATES
+default             user-service-5c9c895554-bpflx               1/1     Running     1 (171m ago)   2d2h   10.244.0.26    minikube       <none>           <none>
+default             user-service-5c9c895554-mrnhl               1/1     Running     1 (171m ago)   2d2h   10.244.0.30    minikube       <none>           <none>
+ingress-nginx       ingress-nginx-admission-create-f7vf7        0/1     Completed   0              2d2h   <none>         minikube       <none>           <none>
+ingress-nginx       ingress-nginx-admission-patch-82zmm         0/1     Completed   1              2d2h   <none>         minikube       <none>           <none>
+ingress-nginx       ingress-nginx-controller-596f8778bc-zj6ct   1/1     Running     1 (171m ago)   2d2h   10.244.0.25    minikube       <none>           <none>
+kube-system         coredns-7d764666f9-8lpth                    1/1     Running     1 (171m ago)   2d2h   10.244.0.29    minikube       <none>           <none>
+kube-system         etcd-minikube                               1/1     Running     1 (171m ago)   2d2h   192.168.49.2   minikube       <none>           <none>
+kube-system         kube-apiserver-minikube                     1/1     Running     1 (171m ago)   2d2h   192.168.49.2   minikube       <none>           <none>
+kube-system         kube-controller-manager-minikube            1/1     Running     1 (171m ago)   2d2h   192.168.49.2   minikube       <none>           <none>
+kube-system         kube-proxy-kkn8p                            1/1     Running     0              8m8s   192.168.49.3   minikube-m02   <none>           <none>
+kube-system         kube-proxy-p5v5k                            1/1     Running     1 (171m ago)   2d2h   192.168.49.2   minikube       <none>           <none>
+kube-system         kube-scheduler-minikube                     1/1     Running     1 (171m ago)   2d2h   192.168.49.2   minikube       <none>           <none>
+kube-system         metrics-server-9d74bb658-lk8xx              1/1     Running     0              148m   10.244.0.37    minikube       <none>           <none>
+kube-system         storage-provisioner                         1/1     Running     3 (171m ago)   2d2h   192.168.49.2   minikube       <none>           <none>
+microservices-poc   kafka-0                                     1/1     Running     1 (171m ago)   2d     10.244.0.34    minikube       <none>           <none>
+microservices-poc   mongodb-0                                   1/1     Running     1 (171m ago)   2d     10.244.0.31    minikube       <none>           <none>
+microservices-poc   order-service-69db8fd486-q6p7l              1/1     Running     1 (171m ago)   46h    10.244.0.33    minikube       <none>           <none>
+microservices-poc   order-service-69db8fd486-shgx4              1/1     Running     2 (171m ago)   46h    10.244.0.28    minikube       <none>           <none>
+microservices-poc   user-service-54d956c5d9-6pfh2               1/1     Running     0              134m   10.244.0.42    minikube       <none>           <none>
+microservices-poc   user-service-54d956c5d9-7rw45               1/1     Running     0              134m   10.244.0.41    minikube       <none>           <none>
+keerthana@Mac-355 microservices-poc % kubectl get pods -A -o wide | grep minikube-m02
+kube-system         kube-proxy-kkn8p                            1/1     Running     0              8m27s   192.168.49.3   minikube-m02   <none>           <none>
+keerthana@Mac-355 microservices-poc % kubectl get nodes                              
+NAME           STATUS     ROLES           AGE     VERSION
+minikube       Ready      control-plane   2d2h    v1.35.1
+minikube-m02   NotReady   <none>          8m36s   v1.35.1
+keerthana@Mac-355 microservices-poc % kubectl get pods -n kube-system
+NAME                               READY   STATUS    RESTARTS       AGE
+coredns-7d764666f9-8lpth           1/1     Running   1 (172m ago)   2d2h
+etcd-minikube                      1/1     Running   1 (172m ago)   2d2h
+kube-apiserver-minikube            1/1     Running   1 (172m ago)   2d2h
+kube-controller-manager-minikube   1/1     Running   1 (172m ago)   2d2h
+kube-proxy-kkn8p                   1/1     Running   0              8m45s
+kube-proxy-p5v5k                   1/1     Running   1 (172m ago)   2d2h
+kube-scheduler-minikube            1/1     Running   1 (172m ago)   2d2h
+metrics-server-9d74bb658-lk8xx     1/1     Running   0              148m
+storage-provisioner                1/1     Running   3 (172m ago)   2d2h
+keerthana@Mac-355 microservices-poc % kubectl get pods -A | grep -Ei 'calico|flannel|cilium|weave|canal'
+keerthana@Mac-355 microservices-poc % kubectl get daemonsets -A
+NAMESPACE     NAME         DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR            AGE
+kube-system   kube-proxy   2         2         2       2            2           kubernetes.io/os=linux   2d2h
+keerthana@Mac-355 microservices-poc % minikube profile list
+┌──────────┬────────┬─────────┬──────────────┬─────────┬────────┬───────┬────────────────┬────────────────────┐
+│ PROFILE  │ DRIVER │ RUNTIME │      IP      │ VERSION │ STATUS │ NODES │ ACTIVE PROFILE │ ACTIVE KUBECONTEXT │
+├──────────┼────────┼─────────┼──────────────┼─────────┼────────┼───────┼────────────────┼────────────────────┤
+│ minikube │ docker │ docker  │ 192.168.49.2 │ v1.35.1 │ OK     │ 2     │ *              │ *                  │
+└──────────┴────────┴─────────┴──────────────┴─────────┴────────┴───────┴────────────────┴────────────────────┘
+keerthana@Mac-355 microservices-poc % minikube addons list
+┌─────────────────────────────┬──────────┬──────────┬────────────────────────────────────────┐
+│         ADDON NAME          │ PROFILE  │  STATUS  │               MAINTAINER               │
+├─────────────────────────────┼──────────┼──────────┼────────────────────────────────────────┤
+│ ambassador                  │ minikube │ disabled │ 3rd party (Ambassador)                 │
+│ amd-gpu-device-plugin       │ minikube │ disabled │ 3rd party (AMD)                        │
+│ auto-pause                  │ minikube │ disabled │ minikube                               │
+│ cloud-spanner               │ minikube │ disabled │ Google                                 │
+│ csi-hostpath-driver         │ minikube │ disabled │ Kubernetes                             │
+│ dashboard                   │ minikube │ disabled │ Kubernetes                             │
+│ default-storageclass        │ minikube │ disabled │ Kubernetes                             │
+│ efk                         │ minikube │ disabled │ 3rd party (Elastic)                    │
+│ freshpod                    │ minikube │ disabled │ Google                                 │
+│ gcp-auth                    │ minikube │ disabled │ Google                                 │
+│ gvisor                      │ minikube │ disabled │ minikube                               │
+│ headlamp                    │ minikube │ disabled │ 3rd party (kinvolk.io)                 │
+│ inaccel                     │ minikube │ disabled │ 3rd party (InAccel [info@inaccel.com]) │
+│ ingress                     │ minikube │ disabled │ Kubernetes                             │
+│ ingress-dns                 │ minikube │ disabled │ minikube                               │
+│ inspektor-gadget            │ minikube │ disabled │ 3rd party (inspektor-gadget.io)        │
+│ istio                       │ minikube │ disabled │ 3rd party (Istio)                      │
+│ istio-provisioner           │ minikube │ disabled │ 3rd party (Istio)                      │
+│ kong                        │ minikube │ disabled │ 3rd party (Kong HQ)                    │
+│ kubeflow                    │ minikube │ disabled │ 3rd party                              │
+│ kubetail                    │ minikube │ disabled │ 3rd party (kubetail.com)               │
+│ kubevirt                    │ minikube │ disabled │ 3rd party (KubeVirt)                   │
+│ logviewer                   │ minikube │ disabled │ 3rd party (unknown)                    │
+│ metallb                     │ minikube │ disabled │ 3rd party (MetalLB)                    │
+│ metrics-server              │ minikube │ disabled │ Kubernetes                             │
+│ nvidia-device-plugin        │ minikube │ disabled │ 3rd party (NVIDIA)                     │
+│ nvidia-driver-installer     │ minikube │ disabled │ 3rd party (NVIDIA)                     │
+│ nvidia-gpu-device-plugin    │ minikube │ disabled │ 3rd party (NVIDIA)                     │
+│ olm                         │ minikube │ disabled │ 3rd party (Operator Framework)         │
+│ pod-security-policy         │ minikube │ disabled │ 3rd party (unknown)                    │
+│ portainer                   │ minikube │ disabled │ 3rd party (Portainer.io)               │
+│ registry                    │ minikube │ disabled │ minikube                               │
+│ registry-aliases            │ minikube │ disabled │ 3rd party (unknown)                    │
+│ registry-creds              │ minikube │ disabled │ 3rd party (UPMC Enterprises)           │
+│ storage-provisioner         │ minikube │ disabled │ minikube                               │
+│ storage-provisioner-rancher │ minikube │ disabled │ 3rd party (Rancher)                    │
+│ volcano                     │ minikube │ disabled │ third-party (volcano)                  │
+│ volumesnapshots             │ minikube │ disabled │ Kubernetes                             │
+│ yakd                        │ minikube │ disabled │ 3rd party (marcnuri.com)               │
+└─────────────────────────────┴──────────┴──────────┴────────────────────────────────────────┘
+keerthana@Mac-355 microservices-poc % kubectl get nodes
+NAME           STATUS     ROLES           AGE    VERSION
+minikube       Ready      control-plane   2d2h   v1.35.1
+minikube-m02   NotReady   <none>          11m    v1.35.1
+keerthana@Mac-355 microservices-poc % 
+
+**Your new worker node minikube-m02 has joined the cluster, but it doesn't have a CNI network configuration. Your original Minikube cluster was created without CNI, and Minikube explicitly warned you:**
+Cluster was created without any CNI, adding a node to it might cause broken networking.
+
+So the situation is:
+                 Minikube Cluster
+                       │
+             ┌─────────┴─────────┐
+             │                   │
+             ▼                   ▼
+        minikube             minikube-m02
+          Ready                 NotReady
+             │                     │
+       CNI exists?             CNI missing ❌
+             │                     │
+             ▼                     ▼
+        Networking OK        NetworkPluginNotReady
+
+Your worker's exact error is:
+-----------------------------
+NetworkReady=false
+NetworkPluginNotReady
+cni config uninitialized
+
+## Clean solution if the CNI addon cannot be enabled:
+Yes. The problem is clear from your output:
+
+```text
+NetworkPluginNotReady
+CNI config uninitialized
+```
+
+This is **not a problem with your User Service, HPA, Deployment, or StatefulSet**.
+
+Your new worker node `minikube-m02` has joined the cluster, but it **doesn't have a CNI network configuration**. Your original Minikube cluster was created without CNI, and Minikube explicitly warned you:
+
+```text
+Cluster was created without any CNI, adding a node to it might cause broken networking.
+```
+
+So the situation is:
+
+```text
+                 Minikube Cluster
+                       │
+             ┌─────────┴─────────┐
+             │                   │
+             ▼                   ▼
+        minikube             minikube-m02
+          Ready                 NotReady
+             │                     │
+       CNI exists?             CNI missing ❌
+             │                     │
+             ▼                     ▼
+        Networking OK        NetworkPluginNotReady
+```
+
+Your worker's exact error is:
+
+```text
+NetworkReady=false
+NetworkPluginNotReady
+cni config uninitialized
+```
+
+## Clean solution if the CNI addon cannot be enabled
+I actually recommend rebuilding the Minikube cluster correctly.
+First, save your Kubernetes manifests if they are not already in Git.
+
+Then:
+
+```bash
+minikube delete
+```
+
+Create a new cluster with multiple nodes and CNI:
+
+```bash
+minikube start --nodes=3 --cni=calico
+```
+
+Then:
+
+```bash
+kubectl get nodes
+```
+
+Expected:
+
+```text
+NAME           STATUS   ROLES           AGE
+minikube       Ready    control-plane   ...
+minikube-m02   Ready    <none>          ...
+minikube-m03   Ready    <none>          ...
+```
+
+Then:
+
+```bash
+kubectl get pods -n kube-system -o wide
+```
+
+You should see Calico Pods running on the nodes.
+
+For example:
+
+```text
+calico-node-xxxxx   1/1   Running   minikube
+calico-node-yyyyy   1/1   Running   minikube-m02
+calico-node-zzzzz   1/1   Running   minikube-m03
+```
+
+The architecture becomes:
+
+```text
+                  Minikube Cluster
+                         │
+           ┌─────────────┼─────────────┐
+           │             │             │
+           ▼             ▼             ▼
+        minikube      minikube-m02  minikube-m03
+       Control Plane    Worker         Worker
+           │             │             │
+           └─────────────┼─────────────┘
+                         │
+                    CNI Network
+                     (Calico)
+```
+
+Then redeploy your application:
+
+```bash
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/mongodb/
+kubectl apply -f k8s/kafka/
+kubectl apply -f k8s/user-service/
+kubectl apply -f k8s/order-service/
+kubectl apply -f k8s/ingress.yaml
+```
+
+Check:
+
+```bash
+kubectl get nodes
+```
+
+Then:
+
+```bash
+kubectl get pods -n microservices-poc -o wide
+```
+
+---
+
+## One important correction to your current architecture
+
+You currently have:
+
+```text
+minikube
+├── MongoDB
+├── Kafka
+├── User Service
+├── Order Service
+├── Ingress
+└── Control Plane
+
+minikube-m02
+└── Nothing
+```
+
+Even after fixing CNI, **Kubernetes does not automatically guarantee that your application Pods will spread across nodes**.
+
+For your node-failure test, you need:
+
+```text
+Node 1
+├── User Pod
+└── Order Pod
+
+Node 2
+├── User Pod
+└── Order Pod
+
+Node 3
+├── User Pod
+└── Order Pod
+```
+
+Otherwise, you could have 6 replicas but all 6 might still be on Node 1.
+
+So the correct learning sequence is:
+
+```text
+1. Fix CNI
+       ↓
+2. Get 3 Nodes Ready
+       ↓
+3. Deploy applications
+       ↓
+4. Verify Pods are distributed
+       ↓
+5. Add Pod Anti-Affinity / topology spread
+       ↓
+6. Start load test
+       ↓
+7. HPA scales User Service
+       ↓
+8. Stop one worker node
+       ↓
+9. Node becomes NotReady
+       ↓
+10. Pods on failed node are recreated elsewhere
+       ↓
+11. Service continues serving traffic
+```
+
+**For your current cluster, first run these two commands and send me the output:**
+
+```bash
+minikube addons list
+```
+
+```bash
+kubectl get daemonsets -A
+```
+
+That will tell us whether we can repair this cluster without destroying your existing setup.
+
+### terminal log after three node creatuion:
+---------------------------------------------
+keerthana@Mac-355 microservices-poc % minikube delete
+🔥  Deleting "minikube" in docker ...
+🔥  Deleting container "minikube" ...
+🔥  Deleting container "minikube-m02" ...
+🔥  Removing /Users/keerthana/.minikube/machines/minikube ...
+🔥  Removing /Users/keerthana/.minikube/machines/minikube-m02 ...
+💀  Removed all traces of the "minikube" cluster.
+keerthana@Mac-355 microservices-poc % minikube start --nodes=3 --cni=calico
+😄  minikube v1.38.1 on Darwin 26.4.1 (arm64)
+✨  Automatically selected the docker driver
+❗  Starting v1.39.0, minikube will default to "containerd" container runtime. See #21973 for more info.
+📌  Using Docker Desktop driver with root privileges
+👍  Starting "minikube" primary control-plane node in "minikube" cluster
+🚜  Pulling base image v0.0.50 ...
+🔥  Creating docker container (CPUs=2, Memory=3072MB) ...
+🐳  Preparing Kubernetes v1.35.1 on Docker 29.2.1 ...
+🔗  Configuring Calico (Container Networking Interface) ...
+🔎  Verifying Kubernetes components...
+    ▪ Using image gcr.io/k8s-minikube/storage-provisioner:v5
+🌟  Enabled addons: storage-provisioner, default-storageclass
+
+👍  Starting "minikube-m02" worker node in "minikube" cluster
+🚜  Pulling base image v0.0.50 ...
+🔥  Creating docker container (CPUs=2, Memory=3072MB) ...
+🌐  Found network options:
+    ▪ NO_PROXY=192.168.49.2
+🐳  Preparing Kubernetes v1.35.1 on Docker 29.2.1 ...
+    ▪ env NO_PROXY=192.168.49.2
+🔎  Verifying Kubernetes components...
+
+👍  Starting "minikube-m03" worker node in "minikube" cluster
+🚜  Pulling base image v0.0.50 ...
+🔥  Creating docker container (CPUs=2, Memory=3072MB) ...
+🌐  Found network options:
+    ▪ NO_PROXY=192.168.49.2,192.168.49.3
+🐳  Preparing Kubernetes v1.35.1 on Docker 29.2.1 ...
+    ▪ env NO_PROXY=192.168.49.2
+    ▪ env NO_PROXY=192.168.49.2,192.168.49.3
+🔎  Verifying Kubernetes components...
+
+❗  /usr/local/bin/kubectl is version 1.32.2, which may have incompatibilities with Kubernetes 1.35.1.
+    ▪ Want kubectl v1.35.1? Try 'minikube kubectl -- get pods -A'
+🏄  Done! kubectl is now configured to use "minikube" cluster and "default" namespace by default
+keerthana@Mac-355 microservices-poc % kubectl get nodes
+NAME           STATUS     ROLES           AGE   VERSION
+minikube       Ready      control-plane   66s   v1.35.1
+minikube-m02   Ready      <none>          40s   v1.35.1
+minikube-m03   NotReady   <none>          20s   v1.35.1
+keerthana@Mac-355 microservices-poc % kubectl get nodes
+NAME           STATUS   ROLES           AGE     VERSION
+minikube       Ready    control-plane   2m20s   v1.35.1
+minikube-m02   Ready    <none>          114s    v1.35.1
+minikube-m03   Ready    <none>          94s     v1.35.1
+keerthana@Mac-355 microservices-poc % kubectl get pods -n kube-system -o wide
+NAME                                       READY   STATUS    RESTARTS   AGE   IP               NODE           NOMINATED NODE   READINESS GATES
+calico-kube-controllers-565c89d6df-jhtff   1/1     Running   0          12m   10.244.205.194   minikube-m02   <none>           <none>
+calico-node-7ppv7                          1/1     Running   0          12m   192.168.49.2     minikube       <none>           <none>
+calico-node-b8rwr                          1/1     Running   0          11m   192.168.49.4     minikube-m03   <none>           <none>
+calico-node-h4zjb                          1/1     Running   0          12m   192.168.49.3     minikube-m02   <none>           <none>
+coredns-7d764666f9-mcr2x                   1/1     Running   0          12m   10.244.205.193   minikube-m02   <none>           <none>
+etcd-minikube                              1/1     Running   0          12m   192.168.49.2     minikube       <none>           <none>
+kube-apiserver-minikube                    1/1     Running   0          12m   192.168.49.2     minikube       <none>           <none>
+kube-controller-manager-minikube           1/1     Running   0          12m   192.168.49.2     minikube       <none>           <none>
+kube-proxy-6nkkc                           1/1     Running   0          11m   192.168.49.4     minikube-m03   <none>           <none>
+kube-proxy-gckd7                           1/1     Running   0          12m   192.168.49.2     minikube       <none>           <none>
+kube-proxy-z5tmt                           1/1     Running   0          12m   192.168.49.3     minikube-m02   <none>           <none>
+kube-scheduler-minikube                    1/1     Running   0          12m   192.168.49.2     minikube       <none>           <none>
+storage-provisioner                        1/1     Running   0          12m   192.168.49.3     minikube-m02   <none>           <none>
+keerthana@Mac-355 microservices-poc % kubectl apply -f k8s/namespace.yaml
+namespace/microservices-poc created
+keerthana@Mac-355 microservices-poc % kubectl apply -f k8s/mongodb/
+service/mongodb created
+statefulset.apps/mongodb created
+keerthana@Mac-355 microservices-poc % kubectl apply -f k8s/kafka/
+service/kafka created
+statefulset.apps/kafka created
+keerthana@Mac-355 microservices-poc % kubectl apply -f k8s/user-service/
+deployment.apps/user-service created
+horizontalpodautoscaler.autoscaling/user-service-hpa created
+service/user-service created
+keerthana@Mac-355 microservices-poc % kubectl apply -f k8s/order-service/
+deployment.apps/order-service created
+service/order-service created
+keerthana@Mac-355 microservices-poc % kubectl apply -f k8s/ingress.yaml
+ingress.networking.k8s.io/microservices-ingress created
+keerthana@Mac-355 microservices-poc % kubectl get nodes
+NAME           STATUS   ROLES           AGE   VERSION
+minikube       Ready    control-plane   13m   v1.35.1
+minikube-m02   Ready    <none>          13m   v1.35.1
+minikube-m03   Ready    <none>          13m   v1.35.1
+keerthana@Mac-355 microservices-poc % kubectl get pods -n microservices-poc -o wide
+NAME                             READY   STATUS              RESTARTS   AGE   IP               NODE           NOMINATED NODE   READINESS GATES
+kafka-0                          0/1     ContainerCreating   0          38s   <none>           minikube-m03   <none>           <none>
+mongodb-0                        1/1     Running             0          42s   10.244.151.1     minikube-m03   <none>           <none>
+order-service-69db8fd486-8g5xp   1/1     Running             0          19s   10.244.120.65    minikube       <none>           <none>
+order-service-69db8fd486-rpbx2   0/1     ContainerCreating   0          19s   <none>           minikube-m03   <none>           <none>
+user-service-54d956c5d9-j755n    1/1     Running             0          26s   10.244.205.195   minikube-m02   <none>           <none>
+user-service-54d956c5d9-pwcdb    0/1     ContainerCreating   0          26s   <none>           minikube-m03   <none>           <none>
+keerthana@Mac-355 microservices-poc % minikube addons list
+┌─────────────────────────────┬──────────┬──────────┬────────────────────────────────────────┐
+│         ADDON NAME          │ PROFILE  │  STATUS  │               MAINTAINER               │
+├─────────────────────────────┼──────────┼──────────┼────────────────────────────────────────┤
+│ ambassador                  │ minikube │ disabled │ 3rd party (Ambassador)                 │
+│ amd-gpu-device-plugin       │ minikube │ disabled │ 3rd party (AMD)                        │
+│ auto-pause                  │ minikube │ disabled │ minikube                               │
+│ cloud-spanner               │ minikube │ disabled │ Google                                 │
+│ csi-hostpath-driver         │ minikube │ disabled │ Kubernetes                             │
+│ dashboard                   │ minikube │ disabled │ Kubernetes                             │
+│ default-storageclass        │ minikube │ disabled │ Kubernetes                             │
+│ efk                         │ minikube │ disabled │ 3rd party (Elastic)                    │
+│ freshpod                    │ minikube │ disabled │ Google                                 │
+│ gcp-auth                    │ minikube │ disabled │ Google                                 │
+│ gvisor                      │ minikube │ disabled │ minikube                               │
+│ headlamp                    │ minikube │ disabled │ 3rd party (kinvolk.io)                 │
+│ inaccel                     │ minikube │ disabled │ 3rd party (InAccel [info@inaccel.com]) │
+│ ingress                     │ minikube │ disabled │ Kubernetes                             │
+│ ingress-dns                 │ minikube │ disabled │ minikube                               │
+│ inspektor-gadget            │ minikube │ disabled │ 3rd party (inspektor-gadget.io)        │
+│ istio                       │ minikube │ disabled │ 3rd party (Istio)                      │
+│ istio-provisioner           │ minikube │ disabled │ 3rd party (Istio)                      │
+│ kong                        │ minikube │ disabled │ 3rd party (Kong HQ)                    │
+│ kubeflow                    │ minikube │ disabled │ 3rd party                              │
+│ kubetail                    │ minikube │ disabled │ 3rd party (kubetail.com)               │
+│ kubevirt                    │ minikube │ disabled │ 3rd party (KubeVirt)                   │
+│ logviewer                   │ minikube │ disabled │ 3rd party (unknown)                    │
+│ metallb                     │ minikube │ disabled │ 3rd party (MetalLB)                    │
+│ metrics-server              │ minikube │ disabled │ Kubernetes                             │
+│ nvidia-device-plugin        │ minikube │ disabled │ 3rd party (NVIDIA)                     │
+│ nvidia-driver-installer     │ minikube │ disabled │ 3rd party (NVIDIA)                     │
+│ nvidia-gpu-device-plugin    │ minikube │ disabled │ 3rd party (NVIDIA)                     │
+│ olm                         │ minikube │ disabled │ 3rd party (Operator Framework)         │
+│ pod-security-policy         │ minikube │ disabled │ 3rd party (unknown)                    │
+│ portainer                   │ minikube │ disabled │ 3rd party (Portainer.io)               │
+│ registry                    │ minikube │ disabled │ minikube                               │
+│ registry-aliases            │ minikube │ disabled │ 3rd party (unknown)                    │
+│ registry-creds              │ minikube │ disabled │ 3rd party (UPMC Enterprises)           │
+│ storage-provisioner         │ minikube │ disabled │ minikube                               │
+│ storage-provisioner-rancher │ minikube │ disabled │ 3rd party (Rancher)                    │
+│ volcano                     │ minikube │ disabled │ third-party (volcano)                  │
+│ volumesnapshots             │ minikube │ disabled │ Kubernetes                             │
+│ yakd                        │ minikube │ disabled │ 3rd party (marcnuri.com)               │
+└─────────────────────────────┴──────────┴──────────┴────────────────────────────────────────┘
+keerthana@Mac-355 microservices-poc % kubectl get daemonsets -A
+NAMESPACE     NAME          DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR            AGE
+kube-system   calico-node   3         3         3       3            3           kubernetes.io/os=linux   15m
+kube-system   kube-proxy    3         3         3       3            3           kubernetes.io/os=linux   15m
+keerthana@Mac-355 microservices-poc % 
+
+
+
+
+keerthana@Mac-355 microservices-poc % kubectl get pods -n microservices-poc -o wide -w
+NAME                             READY   STATUS    RESTARTS        AGE     IP               NODE           NOMINATED NODE   READINESS GATES
+kafka-0                          1/1     Running   0               5m19s   10.244.151.2     minikube-m03   <none>           <none>
+mongodb-0                        1/1     Running   0               5m23s   10.244.151.1     minikube-m03   <none>           <none>
+order-service-69db8fd486-8g5xp   1/1     Running   3 (4m6s ago)    5m      10.244.120.65    minikube       <none>           <none>
+order-service-69db8fd486-rpbx2   1/1     Running   0               5m      10.244.151.4     minikube-m03   <none>           <none>
+user-service-54d956c5d9-j755n    1/1     Running   2 (4m20s ago)   5m7s    10.244.205.195   minikube-m02   <none>           <none>
+user-service-54d956c5d9-pwcdb    1/1     Running   0               5m7s    10.244.151.3     minikube-m03   <none>           <none>
+^C%                                                                                                                             
+keerthana@Mac-355 microservices-poc % kubectl get pods -n microservices-poc -o wide
+NAME                             READY   STATUS    RESTARTS        AGE     IP               NODE           NOMINATED NODE   READINESS GATES
+kafka-0                          1/1     Running   0               6m6s    10.244.151.2     minikube-m03   <none>           <none>
+mongodb-0                        1/1     Running   0               6m10s   10.244.151.1     minikube-m03   <none>           <none>
+order-service-69db8fd486-8g5xp   1/1     Running   3 (4m53s ago)   5m47s   10.244.120.65    minikube       <none>           <none>
+order-service-69db8fd486-rpbx2   1/1     Running   0               5m47s   10.244.151.4     minikube-m03   <none>           <none>
+user-service-54d956c5d9-j755n    1/1     Running   2 (5m7s ago)    5m54s   10.244.205.195   minikube-m02   <none>           <none>
+user-service-54d956c5d9-pwcdb    1/1     Running   0               5m54s   10.244.151.3     minikube-m03   <none>           <none>
+keerthana@Mac-355 microservices-poc % kubectl get hpa -n microservices-poc
+NAME               REFERENCE                 TARGETS              MINPODS   MAXPODS   REPLICAS   AGE
+user-service-hpa   Deployment/user-service   cpu: <unknown>/50%   2         10        2          9m7s
+keerthana@Mac-355 microservices-poc % minikube addons enable metrics-server
+💡  metrics-server is an addon maintained by Kubernetes. For any concerns contact minikube on GitHub.
+You can view the list of minikube maintainers at: https://github.com/kubernetes/minikube/blob/master/OWNERS
+    ▪ Using image registry.k8s.io/metrics-server/metrics-server:v0.8.1
+🌟  The 'metrics-server' addon is enabled
+keerthana@Mac-355 microservices-poc % kubectl get pods -n kube-system | grep metrics
+metrics-server-9d74bb658-k5bx6             1/1     Running   0          3m
+keerthana@Mac-355 microservices-poc % kubectl top nodes
+NAME           CPU(cores)   CPU(%)   MEMORY(bytes)   MEMORY(%)   
+minikube       197m         1%       1247Mi          15%         
+minikube-m02   100m         1%       749Mi           9%          
+minikube-m03   145m         1%       1364Mi          17%         
+keerthana@Mac-355 microservices-poc % kubectl top pods -n microservices-poc
+NAME                             CPU(cores)   MEMORY(bytes)   
+kafka-0                          21m          509Mi           
+mongodb-0                        9m           156Mi           
+order-service-69db8fd486-8g5xp   19m          43Mi            
+order-service-69db8fd486-rpbx2   19m          49Mi            
+user-service-54d956c5d9-j755n    6m           42Mi            
+user-service-54d956c5d9-pwcdb    4m           46Mi            
+keerthana@Mac-355 microservices-poc % minikube addons enable ingress
+💡  ingress is an addon maintained by Kubernetes. For any concerns contact minikube on GitHub.
+You can view the list of minikube maintainers at: https://github.com/kubernetes/minikube/blob/master/OWNERS
+💡  After the addon is enabled, please run "minikube tunnel" and your ingress resources would be available at "127.0.0.1"
+    ▪ Using image registry.k8s.io/ingress-nginx/controller:v1.14.3
+    ▪ Using image registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.7
+    ▪ Using image registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.7
+🔎  Verifying ingress addon...
+🌟  The 'ingress' addon is enabled
+keerthana@Mac-355 microservices-poc % kubectl get pods -n ingress-nginx
+NAME                                        READY   STATUS      RESTARTS   AGE
+ingress-nginx-admission-create-rv8mh        0/1     Completed   0          66s
+ingress-nginx-admission-patch-z7lnb         0/1     Completed   1          66s
+ingress-nginx-controller-596f8778bc-77cdf   0/1     Running     0          66s
+keerthana@Mac-355 microservices-poc % kubectl get ingress -n microservices-poc
+NAME                    CLASS   HOSTS                                    ADDRESS   PORTS   AGE
+microservices-ingress   nginx   user-service.local,order-service.local             80      14m
+keerthana@Mac-355 microservices-poc % kubectl get pods -n microservices-poc -o wide
+NAME                             READY   STATUS    RESTARTS      AGE   IP               NODE           NOMINATED NODE   READINESS GATES
+kafka-0                          1/1     Running   0             14m   10.244.151.2     minikube-m03   <none>           <none>
+mongodb-0                        1/1     Running   0             14m   10.244.151.1     minikube-m03   <none>           <none>
+order-service-69db8fd486-8g5xp   1/1     Running   3 (13m ago)   14m   10.244.120.65    minikube       <none>           <none>
+order-service-69db8fd486-rpbx2   1/1     Running   0             14m   10.244.151.4     minikube-m03   <none>           <none>
+user-service-54d956c5d9-j755n    1/1     Running   2 (13m ago)   14m   10.244.205.195   minikube-m02   <none>           <none>
+user-service-54d956c5d9-pwcdb    1/1     Running   0             14m   10.244.151.3     minikube-m03   <none>           <none>
+keerthana@Mac-355 microservices-poc % kubectl scale deployment user-service \
+  --replicas=6 \
+  -n microservices-poc
+deployment.apps/user-service scaled
+keerthana@Mac-355 microservices-poc % kubectl get pods -n microservices-poc -o wide -w
+NAME                             READY   STATUS              RESTARTS      AGE   IP               NODE           NOMINATED NODE  READINESS GATES
+kafka-0                          1/1     Running             0             16m   10.244.151.2     minikube-m03   <none>  <none>
+mongodb-0                        1/1     Running             0             16m   10.244.151.1     minikube-m03   <none>  <none>
+order-service-69db8fd486-8g5xp   1/1     Running             3 (15m ago)   16m   10.244.120.65    minikube       <none>  <none>
+order-service-69db8fd486-rpbx2   1/1     Running             0             16m   10.244.151.4     minikube-m03   <none>  <none>
+user-service-54d956c5d9-8fzds    1/1     Running             0             5s    10.244.151.6     minikube-m03   <none>  <none>
+user-service-54d956c5d9-j755n    1/1     Running             2 (15m ago)   16m   10.244.205.195   minikube-m02   <none>  <none>
+user-service-54d956c5d9-mctk8    1/1     Running             0             5s    10.244.205.196   minikube-m02   <none>  <none>
+user-service-54d956c5d9-pqs2q    0/1     ContainerCreating   0             5s    <none>           minikube       <none>  <none>
+user-service-54d956c5d9-pwcdb    1/1     Running             0             16m   10.244.151.3     minikube-m03   <none>  <none>
+user-service-54d956c5d9-xwpr5    0/1     ContainerCreating   0             5s    <none>           minikube       <none>  <none>
+user-service-54d956c5d9-pqs2q    1/1     Running             0             8s    10.244.120.69    minikube       <none>  <none>
+user-service-54d956c5d9-xwpr5    1/1     Running             0             11s   10.244.120.70    minikube       <none>  <none>
+^C%          
+keerthana@Mac-355 microservices-poc % kubectl get pods -n microservices-poc -o wide
+NAME                             READY   STATUS    RESTARTS      AGE   IP               NODE           NOMINATED NODE   READINESS GATES
+kafka-0                          1/1     Running   0             17m   10.244.151.2     minikube-m03   <none>           <none>
+mongodb-0                        1/1     Running   0             17m   10.244.151.1     minikube-m03   <none>           <none>
+order-service-69db8fd486-8g5xp   1/1     Running   3 (16m ago)   17m   10.244.120.65    minikube       <none>           <none>
+order-service-69db8fd486-rpbx2   1/1     Running   0             17m   10.244.151.4     minikube-m03   <none>           <none>
+user-service-54d956c5d9-8fzds    1/1     Running   0             54s   10.244.151.6     minikube-m03   <none>           <none>
+user-service-54d956c5d9-j755n    1/1     Running   2 (16m ago)   17m   10.244.205.195   minikube-m02   <none>           <none>
+user-service-54d956c5d9-mctk8    1/1     Running   0             54s   10.244.205.196   minikube-m02   <none>           <none>
+user-service-54d956c5d9-pqs2q    1/1     Running   0             54s   10.244.120.69    minikube       <none>           <none>
+user-service-54d956c5d9-pwcdb    1/1     Running   0             17m   10.244.151.3     minikube-m03   <none>           <none>
+user-service-54d956c5d9-xwpr5    1/1     Running   0             54s   10.244.120.70    minikube       <none>           <none>
+keerthana@Mac-355 microservices-poc % 
+
+---
+
+# Identify the node we will kill
+
+Suppose you have:
+
+```text
+user-service-aaa → minikube-m02
+user-service-bbb → minikube-m02
+```
+
+We'll simulate:
+
+```text
+minikube-m02 💥
+```
+
+Before doing that, open **three terminals**.
+
+### Terminal 1 — Nodes
+
+```bash
+kubectl get nodes -w
+```
+
+### Terminal 2 — Pods
+
+```bash
+kubectl get pods -n microservices-poc -o wide -w
+```
+
+### Terminal 3 — Application requests
+
+Later, run:
+
+```bash
+while true; do
+  curl -s -H "Host: user-service.local" http://user-service.local
+  sleep 1
+done
+```
+
+This continuously sends traffic.
+
+---
+
+# Step 7: Simulate node failure
+
+Now stop the worker:
+
+```bash
+minikube node stop minikube-m02
+```
+
+Then watch Terminal 1:
+
+```text
+minikube         Ready
+minikube-m02     NotReady
+minikube-m03     Ready
+```
+
+Your Pods on `minikube-m02` will eventually become unavailable.
+
+The important thing to observe is:
+
+```text
+minikube-m02
+    ❌
+    │
+    ├── User Pod 1
+    └── User Pod 2
+          ↓
+       Node failure
+          ↓
+    Kubernetes detects failure
+          ↓
+    Pods become unavailable
+          ↓
+    Deployment needs 6 replicas
+          ↓
+    Scheduler places replacements
+          ↓
+    minikube / minikube-m03
+          ↓
+    New Pods Running
+```
+
+Then check:
+
+```bash
+kubectl get pods -n microservices-poc -o wide
+```
+
+You should eventually see the replacement Pods on healthy nodes.
+
+---
+
+## But there's one major caveat
+
+Your **MongoDB and Kafka are StatefulSets with only 1 replica**.
+
+Right now:
+
+```text
+MongoDB
+  └── mongodb-0
+      └── minikube-m03
+
+Kafka
+  └── kafka-0
+      └── minikube-m03
+```
+
+If `minikube-m03` fails:
+
+```text
+MongoDB ❌
+Kafka    ❌
+```
+ 
+A StatefulSet **does not automatically provide database failover just because it is a StatefulSet**.
+
+This is a critical distinction:
+
+```text
+Deployment + 6 replicas
+→ Application-level availability
+
+StatefulSet + 1 replica
+→ Stable identity and storage
+→ NOT high availability
+```
+
+For real MongoDB failover, you'd need a **MongoDB replica set** with multiple MongoDB Pods.
+
+For Kafka high availability, you'd need **multiple Kafka brokers** and appropriate replication.
+
+So your learning path should now be:
+
+```text
+                Kubernetes HA Lab
+                       │
+        ┌──────────────┴──────────────┐
+        │                             │
+   Stateless HA                  Stateful HA
+        │                             │
+        ▼                             ▼
+User Service                    MongoDB Replica Set
+Order Service                   Kafka Multi-Broker
+        │                             │
+        ▼                             ▼
+Deployment                      StatefulSet
+HPA                             Persistent Volumes
+Pod Anti-Affinity                Replication
+        │                             │
+        └──────────────┬──────────────┘
+                       ▼
+                 Node Failure
+                       │
+                       ▼
+                 Full HA Test
+```
+
+**So your immediate next command is:**
+
+```bash
+kubectl get pods -n microservices-poc -o wide
+```
+
+But first enable the two missing addons:
+
+```bash
+minikube addons enable metrics-server
+minikube addons enable ingress
+```
+
+Then verify everything is `Running`. After that, **scale User Service to 6 and distribute the Pods**, and only then perform the node failure test.
+
+### Terminal Logs: for failover node check:
+keerthana@Mac-355 microservices-poc % kubectl get nodes -w
+NAME           STATUS   ROLES           AGE   VERSION
+minikube       Ready    control-plane   32m   v1.35.1
+minikube-m02   Ready    <none>          31m   v1.35.1
+minikube-m03   Ready    <none>          31m   v1.35.1
+minikube-m02   NotReady   <none>          33m   v1.35.1
+minikube-m02   NotReady   <none>          33m   v1.35.1
+minikube-m02   NotReady   <none>          33m   v1.35.1
+minikube       Ready      control-plane   34m   v1.35.1
+minikube-m03   Ready      <none>          36m   v1.35.1
+minikube-m03   Ready      <none>          39m   v1.35.1
+minikube       Ready      control-plane   39m   v1.35.1
+minikube-m03   Ready      <none>          43m   v1.35.1
+minikube       Ready      control-plane   45m   v1.35.1
+minikube-m03   Ready      <none>          48m   v1.35.1
+minikube       Ready      control-plane   50m   v1.35.1
+minikube-m03   Ready      <none>          53m   v1.35.1
+minikube       Ready      control-plane   55m   v1.35.1
+minikube-m03   Ready      <none>          59m   v1.35.1
+minikube       Ready      control-plane   60m   v1.35.1
+minikube-m03   Ready      <none>          64m   v1.35.1
+minikube       Ready      control-plane   65m   v1.35.1
+keerthana@Mac-355 microservices-poc % kubectl get pods -n microservices-poc -o wide -w
+NAME                             READY   STATUS    RESTARTS      AGE   IP               NODE           NOMINATED NODE   READINESS GATES
+kafka-0                          1/1     Running   0             19m   10.244.151.2     minikube-m03   <none>           <none>
+mongodb-0                        1/1     Running   0             19m   10.244.151.1     minikube-m03   <none>           <none>
+order-service-69db8fd486-8g5xp   1/1     Running   3 (18m ago)   18m   10.244.120.65    minikube       <none>           <none>
+order-service-69db8fd486-rpbx2   1/1     Running   0             18m   10.244.151.4     minikube-m03   <none>           <none>
+user-service-54d956c5d9-j755n    1/1     Running   2 (18m ago)   19m   10.244.205.195   minikube-m02   <none>           <none>
+user-service-54d956c5d9-pwcdb    1/1     Running   0             19m   10.244.151.3     minikube-m03   <none>           <none>
+user-service-54d956c5d9-j755n    1/1     Running   2 (20m ago)   20m   10.244.205.195   minikube-m02   <none>           <none>
+user-service-54d956c5d9-j755n    1/1     Running   2 (25m ago)   25m   10.244.205.195   minikube-m02   <none>           <none>
+user-service-54d956c5d9-j755n    1/1     Terminating   2 (25m ago)   25m   10.244.205.195   minikube-m02   <none>           <none>
+user-service-54d956c5d9-f86qs    0/1     Pending       0             0s    <none>           <none>         <none>           <none>
+user-service-54d956c5d9-f86qs    0/1     Pending       0             0s    <none>           minikube       <none>           <none>
+user-service-54d956c5d9-f86qs    0/1     ContainerCreating   0             0s    <none>           minikube       <none>           <none>
+user-service-54d956c5d9-f86qs    0/1     ContainerCreating   0             1s    <none>           minikube       <none>           <none>
+user-service-54d956c5d9-f86qs    1/1     Running             0             4s    10.244.120.71    minikube       <none>           <none>
+* load test:
+keerthana@Mac-355 microservices-poc % while true; do
+  curl -s -H "Host: user-service.local" http://user-service.local
+  sleep 1
+done
+
