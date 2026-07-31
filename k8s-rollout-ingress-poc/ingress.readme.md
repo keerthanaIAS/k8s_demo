@@ -198,3 +198,10 @@ So:
 That's why the command says:
 
 > Please do not close this terminal.
+
+-----------------------------------------------------------------------------------------------------------------------------------------
+
+*One more important point*:                                                                                             -->*important note*
+Ingress itself doesn't create the domain/DNS record. You configure DNS (or /etc/hosts locally) so that nginx.local resolves to the Ingress entry point. Then the Ingress controller receives the HTTP request and applies your routing rules. 
+
+*Note*:/etc/hosts is a local file on your Mac that manually maps a domain name to an IP address.

@@ -33,12 +33,6 @@ REVISION  CHANGE-CAUSE
 1         <none>
 2         <none>
 
-keerthana@Mac-375 k8s-rollout-ingress-poc % kubectl rollout history deployment/nginx-deployment
-deployment.apps/nginx-deployment 
-REVISION  CHANGE-CAUSE
-1         <none>
-2         <none>
-
 keerthana@Mac-375 k8s-rollout-ingress-poc % kubectl rollout undo deployment/nginx-deployment
 deployment.apps/nginx-deployment rolled back
 keerthana@Mac-375 k8s-rollout-ingress-poc % kubectl rollout status deployment/nginx-deployment
