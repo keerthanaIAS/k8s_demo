@@ -1093,3 +1093,107 @@ For your upcoming microservices POC, you should build exactly this:
 ```
 
 That practical exercise will make the difference between **Ingress vs Service** completely clear.
+
+-------------------------------------------------------------------------------------------------------------------------------------
+
+# /etc/hosts means?
+-------------------------------------------------------------------------------------------------------------------------------------
+
+`/etc/hosts` is a **local file on your Mac that manually maps a domain name to an IP address**.
+
+For your Minikube Ingress POC, you might add:
+
+```text
+192.168.49.2   nginx.local
+```
+
+This means:
+
+```text
+When my Mac sees:
+nginx.local
+
+Use this IP:
+192.168.49.2
+```
+
+So when you open:
+
+```text
+http://nginx.local
+```
+
+your Mac does:
+
+```text
+Browser
+   ↓
+nginx.local
+   ↓
+/etc/hosts
+   ↓
+192.168.49.2
+   ↓
+Minikube
+   ↓
+Ingress
+   ↓
+nginx-service
+   ↓
+nginx-pod
+```
+
+### Why do we use it?
+
+Normally, a real domain like:
+
+```text
+google.com
+```
+
+is resolved using **DNS**.
+
+But `nginx.local` is your **fake/local domain**. It doesn't exist in public DNS, so you manually tell your Mac:
+
+```text
+nginx.local → 192.168.49.2
+```
+
+using `/etc/hosts`.
+
+### Important distinction
+
+```text
+/etc/hosts
+    ↓
+Your Mac locally resolves the domain
+
+DNS
+    ↓
+Usually resolves domains for networks/users globally
+
+Ingress
+    ↓
+Receives the HTTP request and decides which Service gets it
+```
+
+So `/etc/hosts` **does not create the Ingress route**. It only helps your Mac find the IP address where the Ingress is reachable.
+
+For your POC:
+-------------
+```text
+
+/etc/hosts
+nginx.local → Ingress IP
+
+Ingress rule
+nginx.local → nginx-service
+
+Service
+nginx-service → Ready nginx Pods
+
+```
+
+That's the complete chain.
+
+-------------------------------------------------------------------------------------------------------------------------------------
