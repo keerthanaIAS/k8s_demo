@@ -1457,4 +1457,673 @@ user-service-77cff9598c-gkfb5   0/1     Terminating   0          137m    10.244.
 keerthana@Keerthanas-MacBook-Air kubernetes-multinode-poc % 
 
 
+# Node Auto Healing:
+                NODE AUTO-HEALING POC
+---------------------------------------------------------
+                 minikube-m02 Worker
+                       │
+                       │
+                 Running / Ready
+                       │
+                       ▼
+                Node is stopped
+                       │
+                       ▼
+                 Node NotReady
+                       │
+                       ▼
+              Health Monitor detects
+                       │
+                       ▼
+                  Remediation
+                       │
+                       ▼
+          Automatically starts m02
+                       │
+                       ▼
+              Node becomes Ready
+                       │
+                       ▼
+                 Recovery verified
+
+## Step 1 — Verify Multi-Node Cluster:
+keerthana@Keerthanas-MacBook-Air kubernetes-multinode-poc % kubectl get nodes -o wide               
+NAME           STATUS   ROLES           AGE     VERSION   INTERNAL-IP    EXTERNAL-IP   OS-IMAGE                         KERNEL-VERSION     CONTAINER-RUNTIME
+minikube       Ready    control-plane   3m54s   v1.35.1   192.168.49.2   <none>        Debian GNU/Linux 12 (bookworm)   6.10.14-linuxkit   docker://29.2.1
+minikube-m02   Ready    <none>          3m34s   v1.35.1   192.168.49.3   <none>        Debian GNU/Linux 12 (bookworm)   6.10.14-linuxkit   docker://29.2.1
+
+## Step 2 — Deploy Test Application:
+keerthana@Keerthanas-MacBook-Air kubernetes-multinode-poc % nano auto-healing-demo.yaml
+keerthana@Keerthanas-MacBook-Air kubernetes-multinode-poc % kubectl apply -f auto-healing-demo.yaml
+deployment.apps/auto-healing-demo created
+keerthana@Keerthanas-MacBook-Air kubernetes-multinode-poc % kubectl get deployment
+NAME                READY   UP-TO-DATE   AVAILABLE   AGE
+auto-healing-demo   0/2     2            0           5s
+keerthana@Keerthanas-MacBook-Air kubernetes-multinode-poc % kubectl get pods -o wide
+NAME                                 READY   STATUS    RESTARTS   AGE   IP           NODE           NOMINATED NODE   READINESS GATES
+auto-healing-demo-549bdd7544-5zbpq   1/1     Running   0    34s   10.244.1.3   minikube-m02   <none>           <none>
+auto-healing-demo-549bdd7544-sxb7b   1/1     Running   0    34s   10.244.1.2   minikube-m02   <none>           <none>
+keerthana@Keerthanas-MacBook-Air kubernetes-multinode-poc % 
+
+## Step 3 — Create Node Health Monitor:
+Node Health Monitor
+        │
+        │ kubectl get node minikube-m02
+        ▼
+   Is Node Ready?
+      /       \
+    YES        NO
+     │          │
+  Continue    Detect failure
+  monitoring     │
+                 ▼
+           Remediation
+
+* node-health-monitor.sh:
+#!/bin/bash
+
+NODE_NAME="minikube-m02"
+
+echo "======================================"
+echo " Kubernetes Node Health Monitor"
+echo " Monitoring Node: $NODE_NAME"
+echo "======================================"
+
+while true
+do
+    NODE_STATUS=$(kubectl get node "$NODE_NAME" \
+        -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
+
+    if [ "$NODE_STATUS" == "True" ]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') | Node: $NODE_NAME | Status: READY"
+
+    else
+        echo "$(date '+%Y-%m-%d %H:%M:%S') | Node: $NODE_NAME | Status: NOT READY"
+
+        echo "⚠️  Node failure detected!"
+    fi
+
+    sleep 5
+done
+
+keerthana@Keerthanas-MacBook-Air kubernetes-multinode-poc % nano node-health-monitor.sh.   -->*saved sh code and exit*
+keerthana@Keerthanas-MacBook-Air kubernetes-multinode-poc % chmod +x node-health-monitor.sh
+keerthana@Keerthanas-MacBook-Air kubernetes-multinode-poc % ./node-health-monitor.sh
+======================================
+ Kubernetes Node Health Monitor
+ Monitoring Node: minikube-m02
+======================================
+2026-08-04 10:50:12 | Node: minikube-m02 | Status: READY
+2026-08-04 10:50:17 | Node: minikube-m02 | Status: READY
+2026-08-04 10:50:22 | Node: minikube-m02 | Status: READY
+2026-08-04 10:50:28 | Node: minikube-m02 | Status: READY
+2026-08-04 10:50:33 | Node: minikube-m02 | Status: READY
+2026-08-04 10:50:38 | Node: minikube-m02 | Status: READY
+2026-08-04 10:50:43 | Node: minikube-m02 | Status: READY
+2026-08-04 10:50:48 | Node: minikube-m02 | Status: READY
+
+What the script is doing
+------------------------
+* Every 5 seconds:
+---------------
+kubectl
+   │
+   ▼
+Kubernetes API Server
+   │
+   ▼
+Node object: minikube-m02
+   │
+   ▼
+Read Ready condition
+   │
+   ├── True  → READY
+   │
+   └── False/empty → NOT READY
+
+This is our Detect phase:
+--------------------------
+DETECT
+  ↓
+Is minikube-m02 Ready?
+  ↓
+YES → Continue monitoring
+NO  → Failure detected
+
+*the script does not heal anything. It only detects*
+
+## Step 4 — Implement Detection Logic:
+
+* node-health-monitor.sh:
+#!/bin/bash
+
+NODE_NAME="minikube-m02"
+
+FAILURE_THRESHOLD=2
+FAILURE_COUNT=0
+
+echo "======================================"
+echo " Kubernetes Node Health Monitor"
+echo " Monitoring Node: $NODE_NAME"
+echo " Failure Threshold: $FAILURE_THRESHOLD"
+echo "======================================"
+
+while true
+do
+    NODE_STATUS=$(kubectl get node "$NODE_NAME" \
+        -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
+
+    CURRENT_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+
+    if [ "$NODE_STATUS" == "True" ]; then
+
+        FAILURE_COUNT=0
+
+        echo "$CURRENT_TIME | Node: $NODE_NAME | Status: READY | Failure Count: $FAILURE_COUNT"
+
+    else
+
+        FAILURE_COUNT=$((FAILURE_COUNT + 1))
+
+        echo "$CURRENT_TIME | Node: $NODE_NAME | Status: NOT READY | Failure Count: $FAILURE_COUNT"
+
+        if [ "$FAILURE_COUNT" -ge "$FAILURE_THRESHOLD" ]; then
+
+            echo "⚠️  $CURRENT_TIME | CONFIRMED NODE FAILURE"
+            echo "⚠️  Node $NODE_NAME has failed $FAILURE_COUNT consecutive health checks"
+
+            # Remediation will be added in the next step.
+
+            break
+        fi
+    fi
+
+    sleep 5
+done
+
+keerthana@Keerthanas-MacBook-Air kubernetes-multinode-poc % nano node-health-monitor.sh. -->*code replacement in sh*
+keerthana@Keerthanas-MacBook-Air kubernetes-multinode-poc % ./node-health-monitor.sh
+======================================
+ Kubernetes Node Health Monitor
+ Monitoring Node: minikube-m02
+ Failure Threshold: 2
+======================================
+2026-08-04 10:54:33 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 10:54:38 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 10:54:48 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 10:54:53 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 10:54:58 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 10:55:03 | Node: minikube-m02 | Status: READY | Failure Count: 0
+
+The monitor is doing:
+----------------------
+                    Check Node
+                        │
+                        ▼
+                 Is Ready=True?
+                  /          \
+                YES           NO
+                 │             │
+                 ▼             ▼
+         Failure Count=0   Failure Count++
+                 │             │
+                 │             ▼
+                 │       Count >= 2?
+                 │          /    \
+                 │        NO      YES
+                 │         │        │
+                 │         ▼        ▼
+                 │      Check     Confirm
+                 │      again     failure
+                 │                  │
+                 └──────────────────┘
+
+* 1st terminal:
+keerthana@Keerthanas-MacBook-Air kubernetes-multinode-poc % minikube node stop minikube-m02
+✋  Stopping node "minikube-m02"  ...
+🛑  Powering off "minikube-m02" via SSH ...
+🛑  Successfully stopped node minikube-m02
+
+* 2nd terminal log continue:
+2026-08-04 10:55:03 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 10:55:08 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 10:55:14 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 10:55:19 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 10:55:24 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 10:55:29 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 10:55:34 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 10:55:39 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 10:55:44 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 10:55:49 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 10:55:54 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 10:56:00 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 10:56:05 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 10:56:10 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 10:56:15 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 10:56:20 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 10:56:25 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 10:56:30 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 10:56:35 | Node: minikube-m02 | Status: NOT READY | Failure Count: 1
+2026-08-04 10:56:41 | Node: minikube-m02 | Status: NOT READY | Failure Count: 2
+⚠️  2026-08-04 10:56:41 | CONFIRMED NODE FAILURE
+⚠️  Node minikube-m02 has failed 2 consecutive health checks
+
+## Step 5 — Implement Decision Logic:
+
+* node-health-monitor.sh:
+#!/bin/bash
+
+NODE_NAME="minikube-m02"
+
+FAILURE_THRESHOLD=2
+FAILURE_COUNT=0
+RECOVERY_REQUIRED=false
+
+echo "======================================"
+echo " Kubernetes Node Health Monitor"
+echo " Monitoring Node: $NODE_NAME"
+echo " Failure Threshold: $FAILURE_THRESHOLD"
+echo "======================================"
+
+while true
+do
+    NODE_STATUS=$(kubectl get node "$NODE_NAME" \
+        -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
+
+    CURRENT_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+
+    if [ "$NODE_STATUS" == "True" ]; then
+
+        FAILURE_COUNT=0
+        RECOVERY_REQUIRED=false
+
+        echo "$CURRENT_TIME | Node: $NODE_NAME | Status: READY | Failure Count: $FAILURE_COUNT"
+
+    else
+
+        FAILURE_COUNT=$((FAILURE_COUNT + 1))
+
+        echo "$CURRENT_TIME | Node: $NODE_NAME | Status: NOT READY | Failure Count: $FAILURE_COUNT"
+
+        if [ "$FAILURE_COUNT" -ge "$FAILURE_THRESHOLD" ]; then
+
+            RECOVERY_REQUIRED=true
+
+            echo "⚠️  $CURRENT_TIME | NODE FAILURE CONFIRMED"
+            echo "⚠️  Recovery Required: $RECOVERY_REQUIRED"
+
+            break
+        fi
+    fi
+
+    sleep 5
+done
+
+if [ "$RECOVERY_REQUIRED" == "true" ]; then
+    echo ""
+    echo "======================================"
+    echo " DECISION: NODE RECOVERY REQUIRED"
+    echo " Node: $NODE_NAME"
+    echo "======================================"
+fi
+
+keerthana@Keerthanas-MacBook-Air kubernetes-multinode-poc % ./node-health-monitor.sh
+======================================
+ Kubernetes Node Health Monitor
+ Monitoring Node: minikube-m02
+ Failure Threshold: 2
+======================================
+2026-08-04 11:00:26 | Node: minikube-m02 | Status: NOT READY | Failure Count: 1
+2026-08-04 11:00:31 | Node: minikube-m02 | Status: NOT READY | Failure Count: 2
+⚠️  2026-08-04 11:00:31 | NODE FAILURE CONFIRMED
+⚠️  Recovery Required: true
+
+======================================
+ DECISION: NODE RECOVERY REQUIRED
+ Node: minikube-m02
+======================================
+
+
+## Step 6 — Implement Remediation:
+
+* node-health-monitor.sh:
+#!/bin/bash
+
+NODE_NAME="minikube-m02"
+
+FAILURE_THRESHOLD=2
+FAILURE_COUNT=0
+RECOVERY_REQUIRED=false
+
+echo "======================================"
+echo " Kubernetes Node Health Monitor"
+echo " Monitoring Node: $NODE_NAME"
+echo " Failure Threshold: $FAILURE_THRESHOLD"
+echo "======================================"
+
+while true
+do
+    NODE_STATUS=$(kubectl get node "$NODE_NAME" \
+        -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
+
+    CURRENT_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+
+    if [ "$NODE_STATUS" == "True" ]; then
+
+        FAILURE_COUNT=0
+        RECOVERY_REQUIRED=false
+
+        echo "$CURRENT_TIME | Node: $NODE_NAME | Status: READY | Failure Count: $FAILURE_COUNT"
+
+    else
+
+        FAILURE_COUNT=$((FAILURE_COUNT + 1))
+
+        echo "$CURRENT_TIME | Node: $NODE_NAME | Status: NOT READY | Failure Count: $FAILURE_COUNT"
+
+        if [ "$FAILURE_COUNT" -ge "$FAILURE_THRESHOLD" ]; then
+
+            RECOVERY_REQUIRED=true
+
+            echo ""
+            echo "⚠️  $CURRENT_TIME | NODE FAILURE CONFIRMED"
+            echo "⚠️  Recovery Required: $RECOVERY_REQUIRED"
+            echo ""
+
+            break
+        fi
+    fi
+
+    sleep 5
+done
+
+
+# ======================================
+# REMEDIATION
+# ======================================
+
+if [ "$RECOVERY_REQUIRED" == "true" ]; then
+
+    echo "======================================"
+    echo " REMEDIATION STARTED"
+    echo " Node: $NODE_NAME"
+    echo " Action: Starting failed node"
+    echo "======================================"
+
+    minikube node start "$NODE_NAME"
+
+    if [ $? -eq 0 ]; then
+
+        echo ""
+        echo "✅ Remediation command completed"
+        echo "✅ Node start command executed"
+
+    else
+
+        echo ""
+        echo "❌ Failed to start node"
+        exit 1
+
+    fi
+fi
+
+keerthana@Keerthanas-MacBook-Air kubernetes-multinode-poc % ./node-health-monitor.sh
+======================================
+ Kubernetes Node Health Monitor
+ Monitoring Node: minikube-m02
+ Failure Threshold: 2
+======================================
+2026-08-04 11:07:59 | Node: minikube-m02 | Status: NOT READY | Failure Count: 1
+2026-08-04 11:08:04 | Node: minikube-m02 | Status: NOT READY | Failure Count: 2
+
+⚠️  2026-08-04 11:08:04 | NODE FAILURE CONFIRMED
+⚠️  Recovery Required: true
+
+======================================
+ REMEDIATION STARTED
+ Node: minikube-m02
+ Action: Starting failed node
+======================================
+👍  Starting "minikube-m02" worker node in "minikube" cluster
+🚜  Pulling base image v0.0.50 ...
+🔄  Restarting existing docker container for "minikube-m02" ...
+🐳  Preparing Kubernetes v1.35.1 on Docker 29.2.1 ...
+🌟  Enabled addons: 
+🔎  Verifying Kubernetes components...
+😄  Successfully started node minikube-m02!
+
+✅ Remediation command completed
+✅ Node start command executed
+keerthana@Keerthanas-MacBook-Air kubernetes-multinode-poc %  
+
+## Step 7 — Verify Node Recovery:
+
+* Replace the remediation section with this in sh:
+# ======================================
+# REMEDIATION
+# ======================================
+
+if [ "$RECOVERY_REQUIRED" == "true" ]; then
+
+    echo "======================================"
+    echo " REMEDIATION STARTED"
+    echo " Node: $NODE_NAME"
+    echo " Action: Starting failed node"
+    echo "======================================"
+
+    echo ""
+    echo "Executing: minikube node start $NODE_NAME"
+    echo ""
+
+    minikube node start "$NODE_NAME"
+
+    if [ $? -ne 0 ]; then
+
+        echo ""
+        echo "❌ Failed to start node"
+        exit 1
+
+    fi
+
+    echo ""
+    echo "✅ Node start command completed"
+    echo "⏳ Waiting for Kubernetes to recognize the node..."
+    echo ""
+
+fi
+
+
+# ======================================
+# VERIFICATION
+# ======================================
+
+echo "======================================"
+echo " VERIFICATION STARTED"
+echo " Waiting for Node: $NODE_NAME"
+echo "======================================"
+
+MAX_ATTEMPTS=12
+ATTEMPT=1
+
+while [ "$ATTEMPT" -le "$MAX_ATTEMPTS" ]
+do
+
+    NODE_STATUS=$(kubectl get node "$NODE_NAME" \
+        -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
+
+    CURRENT_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+
+    if [ "$NODE_STATUS" == "True" ]; then
+
+        echo ""
+        echo "$CURRENT_TIME | Node: $NODE_NAME | Status: READY"
+
+        echo ""
+        echo "======================================"
+        echo " 🎉 NODE AUTO-HEALING COMPLETE"
+        echo "======================================"
+
+        echo "Node: $NODE_NAME"
+        echo "Status: Ready"
+        echo "Recovery: Successful"
+
+        exit 0
+
+    else
+
+        echo "$CURRENT_TIME | Attempt $ATTEMPT/$MAX_ATTEMPTS | Node: $NODE_NAME | Status: NOT READY"
+
+    fi
+
+    ATTEMPT=$((ATTEMPT + 1))
+
+    sleep 5
+
+done
+
+
+echo ""
+echo "======================================"
+echo " ❌ NODE AUTO-HEALING FAILED"
+echo "======================================"
+
+echo "Node: $NODE_NAME"
+echo "Reason: Node did not become Ready within expected time"
+
+exit 1
+
+keerthana@Keerthanas-MacBook-Air kubernetes-multinode-poc % minikube node stop minikube-m02
+✋  Stopping node "minikube-m02"  ...
+🛑  Powering off "minikube-m02" via SSH ...
+🛑  Successfully stopped node minikube-m02
+keerthana@Keerthanas-MacBook-Air kubernetes-multinode-poc % 
+keerthana@Keerthanas-MacBook-Air kubernetes-multinode-poc % ./node-health-monitor.sh
+======================================
+ Kubernetes Node Health Monitor
+ Monitoring Node: minikube-m02
+ Failure Threshold: 2
+======================================
+2026-08-04 11:11:09 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 11:11:14 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 11:11:19 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 11:11:24 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 11:11:29 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 11:11:34 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 11:11:39 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 11:11:44 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 11:11:50 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 11:11:55 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 11:12:00 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 11:12:05 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 11:12:10 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 11:12:15 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 11:12:20 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 11:12:25 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 11:12:31 | Node: minikube-m02 | Status: READY | Failure Count: 0
+2026-08-04 11:12:36 | Node: minikube-m02 | Status: NOT READY | Failure Count: 1
+2026-08-04 11:12:41 | Node: minikube-m02 | Status: NOT READY | Failure Count: 2
+
+⚠️  2026-08-04 11:12:41 | NODE FAILURE CONFIRMED
+⚠️  Recovery Required: true
+
+======================================
+ REMEDIATION STARTED
+ Node: minikube-m02
+ Action: Starting failed node
+======================================
+
+Executing: minikube node start minikube-m02
+
+👍  Starting "minikube-m02" worker node in "minikube" cluster
+🚜  Pulling base image v0.0.50 ...
+🔄  Restarting existing docker container for "minikube-m02" ...
+🐳  Preparing Kubernetes v1.35.1 on Docker 29.2.1 ...
+🔎  Verifying Kubernetes components...
+🌟  Enabled addons: 
+😄  Successfully started node minikube-m02!
+
+✅ Node start command completed
+⏳ Waiting for Kubernetes to recognize the node...
+
+======================================
+ VERIFICATION STARTED
+ Waiting for Node: minikube-m02
+======================================
+2026-08-04 11:12:58 | Attempt 1/12 | Node: minikube-m02 | Status: NOT READY
+2026-08-04 11:13:03 | Attempt 2/12 | Node: minikube-m02 | Status: NOT READY
+
+2026-08-04 11:13:08 | Node: minikube-m02 | Status: READY
+
+======================================
+ 🎉 NODE AUTO-HEALING COMPLETE
+======================================
+Node: minikube-m02
+Status: Ready
+Recovery: Successful
+keerthana@Keerthanas-MacBook-Air kubernetes-multinode-poc % 
+
+the most important point:
+--------------------------
+minikube node stop minikube-m02
+        ↓
+YOU intentionally create failure
+        ↓
+Health Monitor detects it
+        ↓
+Health Monitor decides recovery is needed
+        ↓
+Health Monitor automatically starts m02
+        ↓
+Health Monitor verifies Kubernetes sees m02 as Ready
+
+
+*Node Auto-Healing POC is now working end-to-end* ------> DETECT → DECIDE → REMEDIATE → VERIFY
+
+
+## Step 8 — Verify Application Recovery:
+keerthana@Keerthanas-MacBook-Air kubernetes-multinode-poc % kubectl get nodes
+NAME           STATUS   ROLES           AGE   VERSION
+minikube       Ready    control-plane   35m   v1.35.1
+minikube-m02   Ready    <none>          35m   v1.35.1
+keerthana@Keerthanas-MacBook-Air kubernetes-multinode-poc % kubectl get deployment auto-healing-demo
+NAME                READY   UP-TO-DATE   AVAILABLE   AGE
+auto-healing-demo   2/2     2            2           31m
+keerthana@Keerthanas-MacBook-Air kubernetes-multinode-poc % kubectl get pods -o wide
+NAME                                 READY   STATUS    RESTARTS        AGE   IP           NODE           NOMINATED NODE   READINESS GATES
+auto-healing-demo-549bdd7544-cvx89   1/1     Running   1 (3m58s ago)   14m   10.244.1.3   minikube-m02   <none>           <none>
+auto-healing-demo-549bdd7544-n2f67   1/1     Running   1 (3m58s ago)   14m   10.244.1.2   minikube-m02   <none>           <none>
+keerthana@Keerthanas-MacBook-Air kubernetes-multinode-poc % 
+
+
+## Step 9 — Test the Complete Flow:
+
+One technical point you should remember:-
+--------------------------------------------------------
+What you built is a local Minikube simulation of a node auto-healing controller.
+
+Your monitor is acting as the infrastructure auto-healing layer:
+---------------------------------------------------------------
+Kubernetes
+    │
+    │ Node health
+    ▼
+node-health-monitor.sh
+    │
+    ├── Detects NotReady
+    ├── Decides failure is confirmed
+    ├── Restarts failed node
+    └── Verifies Ready
+
+*Now completed* --> A custom node auto-healing simulation using a health monitor to detect a failed Minikube node and automatically restart it.
+
+current POC:
+-------------
+Node fails
+   ↓
+Shell script detects it
+   ↓
+Shell script runs:
+minikube node start
+   ↓
+Same node comes back
 

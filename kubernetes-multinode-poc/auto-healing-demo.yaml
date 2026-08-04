@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auto-healing-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: auto-healing-demo
+  template:
+    metadata:
+      labels:
+        app: auto-healing-demo
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: minikube-m02
+      containers:
+        - name: nginx
+          image: nginx:latest
+          ports:
+            - containerPort: 80
