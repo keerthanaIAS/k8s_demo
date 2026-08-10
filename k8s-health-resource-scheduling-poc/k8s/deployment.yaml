@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: health-app
+  namespace: health-poc
+spec:
+  replicas: 2
+
+  selector:
+    matchLabels:
+      app: health-app
+
+  template:
+    metadata:
+      labels:
+        app: health-app
+
+    spec:
+      containers:
+        - name: health-app
+          image: health-resource-poc:1.0
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - containerPort: 3000
+          
+          # Resource Requests & Limits
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+          
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+
+          # Deployment with READINESS PROBE
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          
+          # Deployment with LIVENESS PROBE
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 3
+
