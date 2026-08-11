@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: node-selector-pod
+spec:
+  nodeSelector:
+    environment: testing # Node selector to schedule the Pod on nodes with the label "environment=testing" / "environment=production" will fail beacause there is no node with that label
+  containers:
+    - name: nginx
+      image: nginx
