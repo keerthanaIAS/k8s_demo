@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-service
+spec:
+  clusterIP: None   # That's what makes it Headless.
+  selector:
+    app: demo
+  ports:
+    - port: 80
+      targetPort: 80
