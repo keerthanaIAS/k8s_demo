@@ -448,3 +448,144 @@ demo-statefulset-0.demo-service.default.svc.cluster.local
         │                  └────────── Service
         └───────────────────────────── StatefulSet Pod
 
+## *DNS = converts a name into an IP address.*
+
+What is DNS?
+------------
+DNS stands for Domain Name System.
+
+Computers communicate using IP addresses:
+-----------------------------------------
+10.244.120.88
+
+But humans and applications prefer names:
+-----------------------------------------
+demo-statefulset-1.demo-service.default.svc.cluster.local
+
+## *nslookup = a command you use to ask DNS, "What IP does this name point to?"*
+
+What is nslookup?
+-----------------
+nslookup means Name Server Lookup.
+
+It is a command-line tool for checking DNS.
+
+When you run:
+----------------
+nslookup demo-service.default.svc.cluster.local
+
+you're basically asking:
+------------------------
+"DNS server, what IP address belongs to this name?"
+
+# 3. What is CoreDNS?
+
+CoreDNS is the DNS server Kubernetes normally uses inside the cluster.
+
+Its job includes answering questions like:
+
+What IP is kubernetes.default.svc.cluster.local?
+
+or:
+
+What IP is demo-service.default.svc.cluster.local?
+
+Your Pod doesn't know the IP itself.
+
+It asks the DNS server.
+
+# 4. Now the interesting part: how does CoreDNS know?
+
+CoreDNS has a Kubernetes plugin that watches Kubernetes resources.
+
+Conceptually:
+
+Kubernetes API
+       ↑
+       |
+    CoreDNS
+       |
+       ↓
+DNS records
+
+CoreDNS learns about:
+
+Services
+Pods
+EndpointSlices
+
+The most important one for your Headless Service is EndpointSlice.
+
+You already ran:
+
+kubectl get endpointslice \
+  -l kubernetes.io/service-name=demo-service \
+  -o wide
+
+and got:
+
+ENDPOINTS
+
+10.244.120.76
+10.244.120.85
+10.244.120.79
+...
+
+After Pod 1 was recreated, it became:
+
+10.244.120.88
+
+Kubernetes updates the EndpointSlice.
+
+So conceptually:
+
+StatefulSet
+    ↓
+Pods
+    ↓
+Pod IPs
+    ↓
+EndpointSlice
+    ↓
+CoreDNS
+    ↓
+DNS response
+
+### if we create service endpoint will auto create? in kubernets?
+  Yes. **Normally, when you create a Service, Kubernetes automatically creates/updates EndpointSlices based on the Service's selector matching Pods.**
+
+Service created
+     ↓
+Service selector: app=kafka
+     ↓
+Kubernetes finds Pods with app=kafka
+     ↓
+EndpointSlice Controller
+     ↓
+EndpointSlice created/updated
+     ↓
+Contains Pod IPs + ports
+
+For your Kafka example:
+----------------------
+Service: kafka
+selector:
+  app: kafka
+
+Pods:
+-----
+kafka-0 → 10.244.120.105
+kafka-1 → 10.244.120.106
+kafka-2 → 10.244.120.107
+
+Kubernetes automatically creates an EndpointSlice roughly containing:
+--------------------------------------------------------------------
+kafka
+ └── EndpointSlice
+      ├── 10.244.120.105:9092
+      ├── 10.244.120.106:9092
+      └── 10.244.120.107:9092
+
+
+*Service + matching Pods → EndpointSlice; StatefulSet + Headless Service adds stable per-Pod DNS identities on top of that.*
+

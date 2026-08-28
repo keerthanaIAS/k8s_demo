@@ -1,0 +1,114 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+spec:
+  clusterIP: None
+  selector:
+    app: redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+
+# Kubernetes Endpoints are API objects that define a list of IP addresses and ports.
+# EndpointSlice belongs squarely inside the Networking and Service Discovery layer.
+
+
+#[ Service Object ] 
+#       │
+#       ▼
+# [ EndpointSlice Controller ] (Runs inside kube-controller-manager)
+#       │
+#       ▼ Writes data to:
+# [ kube-apiserver / etcd ] 
+#       │
+#       ▼ Watches & Reads from:
+# [ kube-proxy ] (On every Worker Node) ──► Programs Kernel Network (iptables/IPVS)
+# [ CoreDNS ]    (Cluster DNS Provider) ──► Resolves Headless Service IPs
+
+# Pod IP = the actual IP address of the Pod.
+# EndpointSlice = a Kubernetes object that stores information about the endpoints behind a Service, including their IPs, ports, and readiness information.
+
+# EndpointSlice is the information. 
+#  |
+# Control Plane maintains it. 
+#  |
+# Data Plane consumes it to make networking work.
+#  |
+# CoreDNS consumes cluster service/endpoints information to answer DNS queries.    ---> A DNS query happens when something needs to convert a hostname/name into an IP address
+
+# -------------------------
+# Your StatefulSet example
+# -------------------------
+# You have:
+
+# demo-statefulset-0
+#         ↓
+# 10.244.120.76
+
+# and Headless Service:
+
+# demo-service
+# clusterIP: None
+
+# Now from another Pod, you run:
+
+# redis-cli -h demo-statefulset-0.demo-service
+
+# At that moment, the Redis client doesn't know the IP.
+
+# So the sequence is:
+# --------------------
+
+# redis-cli
+#    │
+#    │ "What is the IP of
+#    │  demo-statefulset-0.demo-service?"
+#    │
+#    ▼
+# DNS QUERY
+#    │
+#    ▼
+# CoreDNS
+#    │
+#    │ checks Kubernetes DNS records
+#    ▼
+# 10.244.120.76
+#    │
+#    ▼
+# redis-cli connects to Pod
+
+# nslookup makes the DNS query obvious
+# ------------------------------------
+# When you run:
+
+# nslookup demo-statefulset-0.demo-service.default.svc.cluster.local
+
+# you are explicitly asking DNS:
+
+# "Give me the IP address for this name."
+
+# CoreDNS responds:
+
+# Name: demo-statefulset-0.demo-service.default.svc.cluster.local
+# Address: 10.244.120.76
+
+# | Thing             | Meaning                                                                                 |
+# | ----------------- | --------------------------------------------------------------------------------------- |
+# | **EndpointSlice** | Kubernetes object that tracks Service endpoints, including Pod IPs                      |
+# | **CoreDNS**       | DNS server that converts names like `demo-statefulset-0.demo-service` into IP addresses |
+
+
+# --------------------------
+# So remember these 4 roles
+# ---------------------------
+# StatefulSet → gives the Pod a stable name/identity.
+
+# Service → selects the Pods and provides networking/DNS integration.
+
+# EndpointSlice → tracks the Pods' current IPs.
+
+# CoreDNS → resolves DNS names to those current IPs.
+
+# nslookup → lets you check/prove that DNS resolution is working.
+
