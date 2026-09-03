@@ -441,10 +441,95 @@ MachineHealthCheck = "node died → replace it."
 
 Scaling = "node/pod capacity is insufficient → add capacity."
 
-**Step 1 — Check the worker capacity**
 
-We first need to know how much CPU/memory the current worker has.
+# Final step of Terminal Log:
 
-Run only this:
+keerthana@Keerthanas-MacBook-Air node-spin-up % kubectl --kubeconfig=node-spinup-kubeconfig.yaml get nodes -o wide
+kubectl --kubeconfig=node-spinup-kubeconfig.yaml get pods -o wide
+kubectl --kubeconfig=node-spinup-kubeconfig.yaml get pods | grep autoscale-trigger
+NAME                                 STATUS   ROLES           AGE    VERSION   INTERNAL-IP   EXTERNAL-IP   OS-IMAGE                       KERNEL-VERSION     CONTAINER-RUNTIME
+node-spinup-cqtbw-b62jq              Ready    control-plane   38m    v1.35.1   172.18.0.3    <none>        Debian GNU/Linux 13 (trixie)   6.10.14-linuxkit   containerd://2.2.1
+node-spinup-md-0-29lx6-tb2tl-5799c   Ready    <none>          32m    v1.35.1   172.18.0.5    <none>        Debian GNU/Linux 13 (trixie)   6.10.14-linuxkit   containerd://2.2.1
+node-spinup-md-0-29lx6-tb2tl-5cmv7   Ready    <none>          101s   v1.35.1   172.18.0.6    <none>        Debian GNU/Linux 13 (trixie)   6.10.14-linuxkit   containerd://2.2.1
+NAME                                 READY   STATUS    RESTARTS   AGE     IP                NODE                                 NOMINATED NODE   READINESS GATES
+autoscale-trigger-5d8cbcb8b7-bjztc   1/1     Running   0          6m27s   192.168.181.193   node-spinup-md-0-29lx6-tb2tl-5cmv7   <none>           <none>
+autoscale-trigger-5d8cbcb8b7-drfb5   1/1     Running   0          6m27s   192.168.38.207    node-spinup-md-0-29lx6-tb2tl-5799c   <none>           <none>
+scale-test-574647494-5cdj5           1/1     Running   0          31m     192.168.38.202    node-spinup-md-0-29lx6-tb2tl-5799c   <none>           <none>
+scale-test-574647494-87t6j           1/1     Running   0          31m     192.168.38.199    node-spinup-md-0-29lx6-tb2tl-5799c   <none>           <none>
+scale-test-574647494-8zt8p           1/1     Running   0          31m     192.168.38.194    node-spinup-md-0-29lx6-tb2tl-5799c   <none>           <none>
+scale-test-574647494-9g2gx           1/1     Running   0          31m     192.168.38.200    node-spinup-md-0-29lx6-tb2tl-5799c   <none>           <none>
+scale-test-574647494-ckdbc           1/1     Running   0          31m     192.168.38.197    node-spinup-md-0-29lx6-tb2tl-5799c   <none>           <none>
+scale-test-574647494-jxl2v           1/1     Running   0          31m     192.168.38.193    node-spinup-md-0-29lx6-tb2tl-5799c   <none>           <none>
+scale-test-574647494-lnthk           1/1     Running   0          31m     192.168.38.198    node-spinup-md-0-29lx6-tb2tl-5799c   <none>           <none>
+scale-test-574647494-v2mvt           1/1     Running   0          31m     192.168.38.196    node-spinup-md-0-29lx6-tb2tl-5799c   <none>           <none>
+scale-test-574647494-x62kx           1/1     Running   0          31m     192.168.38.195    node-spinup-md-0-29lx6-tb2tl-5799c   <none>           <none>
+scale-test-574647494-zs7l5           1/1     Running   0          31m     192.168.38.201    node-spinup-md-0-29lx6-tb2tl-5799c   <none>           <none>
+autoscale-trigger-5d8cbcb8b7-bjztc   1/1     Running   0          6m27s
+autoscale-trigger-5d8cbcb8b7-drfb5   1/1     Running   0          6m27s
+keerthana@Keerthanas-MacBook-Air node-spin-up % 
 
-Pods become Pending because the worker has no capacity → Cluster Autoscaler increases the MachineDeployment replicas → CAPI creates a new Machine → CAPD creates a new Docker worker.
+**the Cluster Autoscaler POC is successfully completed. ✅**
+
+Output gives the final proof:
+
+* **Workers:** 1 → **2**
+* **Both worker nodes:** `Ready`
+* **New worker:** `node-spinup-md-0-29lx6-tb2tl-5cmv7`
+* **Autoscale-trigger pods:** **2/2 Running**
+* The two pods are distributed across **different workers**.
+
+### Final flow proven
+
+```text
+2 autoscale-trigger pods
+        ↓
+1 pod became Pending
+        ↓
+Cluster Autoscaler detected Pending pod
+        ↓
+MachineDeployment scaled 1 → 2
+        ↓
+CAPI created new Machine
+        ↓
+CAPD created new Docker worker
+        ↓
+Worker joined Kubernetes
+        ↓
+Pending pod scheduled
+        ↓
+Both pods Running
+```
+
+So have now demonstrated **automatic node scale-up using Cluster Autoscaler + Cluster API + CAPD**. 🎉
+
+**Important:** We did not manually scale the MachineDeployment. The scale-up was triggered automatically by the Cluster Autoscaler.
+
+### What caused the earlier error
+
+The final root cause was:
+
+```text
+Cluster topology had:
+replicas: 1
+```
+
+The Cluster Topology controller kept reverting CA's `1 → 2` back to `1`.
+
+Removing that fixed the conflict, and the next automatic scale-up succeeded.
+
+
+# File definition:
+------------------
+------------------
+| File                                         | Simple meaning                                             |
+| -------------------------------------------- | ---------------------------------------------------------- |
+| `kind-capi.yaml`                             | Creates/configures the **CAPI management kind cluster**    |
+| `node-spinup.yaml`                           | Main configuration for creating the **workload cluster**   |
+| `machine-health-check.yaml`                  | Configuration for **auto-healing failed nodes**            |
+| `capi-management-kubeconfig.yaml`            | Login/access config for the **management cluster**         |
+| `capi-management-autoscaler-kubeconfig.yaml` | Management-cluster access used by **Cluster Autoscaler**   |
+| `node-spinup-kubeconfig.yaml`                | Login/access config for the **workload cluster**           |
+| `node-spinup-autoscaler-kubeconfig.yaml`     | Workload-cluster access config prepared for **Autoscaler** |
+| `workload-original-kubeconfig.yaml`          | Original workload kubeconfig                               |
+| `workload-autoscaler-kubeconfig.yaml`        | Workload kubeconfig used/prepared for autoscaling          |
+
