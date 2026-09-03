@@ -1,0 +1,16 @@
+apiVersion: cluster.x-k8s.io/v1beta2
+kind: Cluster
+metadata:
+  name: node-spinup
+spec:
+  topology:
+    classRef:
+      name: quick-start
+    version: v1.35.1
+    controlPlane:
+      replicas: 1
+    workers:
+      machineDeployments:
+        - class: default-worker
+          name: md-0
+          replicas: 1

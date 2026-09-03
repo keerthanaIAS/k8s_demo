@@ -1,0 +1,16 @@
+apiVersion: cluster.x-k8s.io/v1beta2
+kind: MachineHealthCheck
+metadata:
+  name: node-spinup-mhc
+  namespace: default
+spec:
+  clusterName: node-spinup
+  selector:
+    matchLabels:
+      cluster.x-k8s.io/cluster-name: node-spinup
+  checks:
+    nodeStartupTimeoutSeconds: 600
+    unhealthyNodeConditions:
+      - type: Ready
+        status: "False"
+        timeoutSeconds: 300
