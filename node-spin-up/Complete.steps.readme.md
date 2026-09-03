@@ -614,3 +614,16 @@ Pod 2 → worker 2
 | 21   | Fix topology replicas         | Stop CAPI Topology from forcing workers back to 1                 |
 | 22   | Wait for CAPI                 | Allow CAPI/CAPD to create the second worker                       |
 | 23   | Final verification            | Confirm new worker is Ready and Pending pod becomes Running       |
+
+
+## Topology here means CAPI's desired cluster structure/configuration.
+
+In our case, it was saying:
+---------------------------
+“The worker count must stay at 1.”
+
+So when Autoscaler changed:
+
+1 → 2 workers, the Topology controller changed it back 2 → 1.
+
+We removed the fixed replicas: 1 so that Cluster Autoscaler could control the worker count.
