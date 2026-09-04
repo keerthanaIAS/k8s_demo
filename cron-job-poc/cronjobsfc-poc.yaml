@@ -1,0 +1,74 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: hello-cron
+spec:
+  schedule: "*/1 * * * *"
+
+  # Keep only the latest 3 successful Jobs ## Kubernetes keeps the last 3 successful Jobs.
+  successfulJobsHistoryLimit: 3
+
+  # Keep only the latest 1 failed Job ## Only the latest failed Job is retained.
+  failedJobsHistoryLimit: 1
+
+  # Do not allow another Job to start while the previous one is running
+  concurrencyPolicy: Forbid
+
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: hello
+              image: busybox:1.36
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  echo "CronJob started"
+                  date
+                  echo "Doing some work..."
+                  sleep 90
+                  echo "CronJob completed"
+
+          restartPolicy: Never
+
+# failover senario:
+
+# apiVersion: batch/v1
+# kind: CronJob
+# metadata:
+#   name: hello-cron
+# spec:
+#   schedule: "*/1 * * * *"
+
+#   # Keep only the latest 3 successful Jobs ## Kubernetes keeps the last 3 successful Jobs.
+#   successfulJobsHistoryLimit: 3
+
+#   # Keep only the latest 1 failed Job ## Only the latest failed Job is retained.
+#   failedJobsHistoryLimit: 1
+
+#   # Do not allow another Job to start while the previous one is running
+#   concurrencyPolicy: Forbid
+
+#   jobTemplate:
+#     spec:
+#       # Don't retry the Pod when it fails ## maximum number of times a Job is allowed to retry after Pod failure.
+#       backoffLimit: 0
+
+#       template:
+#         spec:
+#           containers:
+#             - name: hello
+#               image: busybox:1.36
+#               command:
+#                 - /bin/sh
+#                 - -c
+#                 - |
+#                   echo "CronJob started"
+#                   date
+#                   echo "Doing some work..."
+#                   echo "Something went wrong!"
+#                   exit 1
+
+#           restartPolicy: Never
