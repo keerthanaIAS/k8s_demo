@@ -1,0 +1,186 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-agent
+
+spec:
+  selector:
+    matchLabels:
+      app: node-agent
+
+  template:
+    metadata:
+      labels:
+        app: node-agent
+
+    spec:
+      containers:
+        - name: agent
+          image: busybox:1.36
+
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+
+          command:
+            - /bin/sh
+            - -c
+            - |
+              while true
+              do
+                echo "=============================="
+                echo "Monitoring Node: $NODE_NAME"
+                echo "Time: $(date)"
+                echo "Memory:"
+                free
+                echo "CPU Load:"
+                cat /proc/loadavg
+                echo "=============================="
+                sleep 30
+              done
+
+
+# keerthana@Mac-551 daemonset % kubectl logs node-agent-588x7
+# ==============================
+# Monitoring Node: minikube
+# Time: Mon Sep  7 05:24:59 UTC 2026
+# Memory:
+#               total        used        free      shared  buff/cache   available
+# Mem:        8025424     2513608     3059052       22448     2452764     5293688
+# Swap:       1048572           0     1048572
+# CPU Load:
+# 4.57 3.97 2.32 4/1236 9
+# ==============================
+# ==============================
+# Monitoring Node: minikube
+# Time: Mon Sep  7 05:25:29 UTC 2026
+# Memory:
+#               total        used        free      shared  buff/cache   available
+# Mem:        8025424     2465004     3107252       22456     2453168     5342364
+# Swap:       1048572           0     1048572
+# CPU Load:
+# 4.15 3.92 2.35 1/1238 12
+# ==============================
+# ==============================
+# Monitoring Node: minikube
+# Time: Mon Sep  7 05:25:59 UTC 2026
+# Memory:
+#               total        used        free      shared  buff/cache   available
+# Mem:        8025424     2497632     3073152       22456     2454640     5309664
+# Swap:       1048572           0     1048572
+# CPU Load:
+# 4.91 4.14 2.48 1/1237 15
+# ==============================
+# keerthana@Mac-551 daemonset % kubectl logs node-agent-jbkpk
+# ==============================
+# Monitoring Node: minikube-m02
+# Time: Mon Sep  7 05:25:30 UTC 2026
+# Memory:
+#               total        used        free      shared  buff/cache   available
+# Mem:        8025424     2451320     3119932       22456     2454172     5355864
+# Swap:       1048572           0     1048572
+# CPU Load:
+# 4.45 3.99 2.38 2/1237 9
+# ==============================
+# ==============================
+# Monitoring Node: minikube-m02
+# Time: Mon Sep  7 05:26:00 UTC 2026
+# Memory:
+#               total        used        free      shared  buff/cache   available
+# Mem:        8025424     2502896     3067888       22456     2454640     5304400
+# Swap:       1048572           0     1048572
+# CPU Load:
+# 4.92 4.15 2.49 2/1238 12
+# ==============================
+# keerthana@Mac-551 daemonset % 
+
+# These are Linux load-average values for approximately 1, 5, and 15 minutes.
+
+# Most importantly, the two Pods identify different nodes:
+
+# node-agent-588x7 → minikube
+# node-agent-jbkpk → minikube-m02
+
+# So our POC flow is now:
+# -----------------------
+# 2 Kubernetes Nodes
+#        ↓
+# DaemonSet
+#        ↓
+# 1 monitoring agent Pod per node
+#        ↓
+# Agent identifies its node
+#        ↓
+# Agent periodically collects CPU + memory information
+#        ↓
+# Logs show the monitoring data
+
+
+
+
+
+# Next, we should test the important monitoring behavior: when the node's workload changes, can our monitoring agent observe the change?
+
+# keerthana@Mac-551 daemonset % kubectl run cpu-test --image=busybox:1.36 --restart=Never -- sh -c "while true; do :; done"
+# pod/cpu-test created
+# keerthana@Mac-551 daemonset % kubectl get pod cpu-test -o wide
+# NAME       READY   STATUS    RESTARTS   AGE   IP           NODE           NOMINATED NODE   READINESS GATES
+# cpu-test   1/1     Running   0          3s    10.244.1.5   minikube-m02   <none>           <none>
+
+# keerthana@Mac-551 daemonset % kubectl get pods -l app=node-agent -o wide
+# NAME               READY   STATUS    RESTARTS   AGE   IP  NODE           NOMINATED NODE   READINESS GATES
+# node-agent-588x7   1/1     Running   0          11m   10.244.0.5  minikube       <none>           <none>
+# node-agent-jbkpk   1/1     Running   0          11m   10.244.1.4  minikube-m02   <none>           <none>
+# keerthana@Mac-551 daemonset % kubectl logs node-agent-jbkpk --tail=20
+# ==============================
+# Monitoring Node: minikube-m02
+# Time: Mon Sep  7 05:36:00 UTC 2026
+# Memory:
+#               total        used        free      shared  buff/cache   available
+# Mem:        8025424     2563440     3000728       22572     2461256     5243800
+# Swap:       1048572           0     1048572
+# CPU Load:
+# 4.54 4.19 3.33 4/1267 72
+# ==============================
+# ==============================
+# Monitoring Node: minikube-m02
+# Time: Mon Sep  7 05:36:30 UTC 2026
+# Memory:
+#               total        used        free      shared  buff/cache   available
+# Mem:        8025424     2533468     3030432       22572     2461524     5273724
+# Swap:       1048572           0     1048572
+# CPU Load:
+# 4.73 4.27 3.38 2/1267 75
+# ==============================
+# keerthana@Mac-551 daemonset % 
+
+# this confirms the CPU workload is running on minikube-m02, and the monitoring agent on that node is continuously collecting CPU/memory data.
+
+# But one important correction: the load average didn't clearly jump because of our test. It stayed around 4.5–4.7, so we shouldn't claim the test caused a measurable increase.
+
+# What we have successfully proved
+# --------------------------------
+# minikube-m02
+#    │
+#    ├── cpu-test Pod
+#    │      └── generates CPU workload
+#    │
+#    └── node-agent Pod
+#           └── monitors CPU + memory
+
+# This is the monitoring POC we wanted.
+
+# Current POC status
+# DaemonSet monitoring
+#         ↓
+# 1 agent per node              ✅
+#         ↓
+# Agent identifies node         ✅
+#         ↓
+# Collects memory information   ✅
+#         ↓
+# Collects CPU load              ✅
+#         ↓
+# Test workload on m02          ✅
