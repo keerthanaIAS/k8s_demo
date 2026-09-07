@@ -770,6 +770,68 @@ vpa-demo-5554dcb5c7-pxxm5   25m           250Mi
 vpa-demo-5554dcb5c7-vm46l   100m          32Mi
 keerthana@Mac-551 vertical-pod-autoscaler % 
 
+
+above .. Command given Terminal log:
+====================================
+
+echo "=== 1. Test webhook TLS with new CA ==="
+
+kubectl create configmap vpa-ca-test \
+  -n default \
+  --from-file=ca.pem=/tmp/vpa-fixed-certs/caCert.pem \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl run tls-test \
+  --rm -i --restart=Never \
+  --image=curlimages/curl:8.10.1 \
+  --overrides='
+{
+  "spec": {
+    "containers": [{
+      "name": "tls-test",
+      "image": "curlimages/curl:8.10.1",
+      "command": [
+        "curl",
+        "-v",
+        "--cacert",
+        "/tmp/ca.pem",
+        "https://vpa-webhook.kube-system.svc:443/healthz"
+      ],
+      "volumeMounts": [{
+        "name": "ca",
+        "mountPath": "/tmp"
+      }]
+    }],
+    "volumes": [{
+      "name": "ca",
+      "configMap": {
+        "name": "vpa-ca-test"
+      }
+    }]
+  }
+}'
+
+
+echo "=== 2. Check admission controller logs ==="
+
+kubectl logs -n kube-system \
+  deployment/vpa-admission-controller \
+  --tail=50
+
+
+echo "=== 3. Check VPA recommendation ==="
+
+kubectl describe vpa vpa-demo | sed -n '/Recommendation:/,/Events:/p'
+
+
+echo "=== 4. Check current Pods/resources ==="
+
+kubectl get pods -l app=vpa-demo -o wide
+
+kubectl get pods -l app=vpa-demo \
+  -o custom-columns='POD:.metadata.name,CPU_REQUEST:.spec.containers[0].resources.requests.cpu,MEM_REQUEST:.spec.containers[0].resources.requests.memory'
+
+
 **where we applied load here? to check this?**
 
 - the load is already inside your vpa-demo.yaml
