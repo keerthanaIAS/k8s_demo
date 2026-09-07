@@ -832,6 +832,73 @@ kubectl get pods -l app=vpa-demo \
   -o custom-columns='POD:.metadata.name,CPU_REQUEST:.spec.containers[0].resources.requests.cpu,MEM_REQUEST:.spec.containers[0].resources.requests.memory'
 
 
+output command:
+==============
+
+Yes — **the VPA webhook is now working correctly.** ✅
+
+Your output proves the full flow:
+
+* ✅ TLS certificate verified successfully
+* ✅ Webhook returned `HTTP 200`
+* ✅ Admission controller received the Pod
+* ✅ VPA recommendation = **25m CPU + 250Mi memory**
+* ✅ Admission controller generated patches
+* ✅ One new Pod already has:
+
+  * CPU request: **25m**
+  * Memory request: **250Mi**
+
+The important proof is:
+
+```text
+Sending patches
+cpu request = 25m
+memory request = 250Mi
+cpu limit = 125m
+memory limit = 1000Mi
+```
+
+And:
+
+```text
+vpa-demo-...-pxxm5   25m   250Mi
+```
+
+So **our VPA POC is successful now.** 🎉
+
+### What actually happened
+
+```text
+Pod created
+   ↓
+VPA Admission Controller
+   ↓
+VPA recommendation
+   ↓
+25m CPU + 250Mi Memory
+   ↓
+Pod resources mutated
+   ↓
+New Pod runs with recommended resources
+```
+
+The older Pods still showing `100m / 32Mi` are expected because **they were created before the successful webhook mutation**.
+
+One small error:
+
+```text
+contentType=, expect application/json
+```
+
+came from our `curl /healthz` test because curl sent a normal HTTP request, not a Kubernetes AdmissionReview request. **It is not a VPA failure.**
+
+### POC status
+
+**VPA → Observe → Recommend → Evict/Recreate → Apply new resources: COMPLETE ✅**
+
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+
 **where we applied load here? to check this?**
 
 - the load is already inside your vpa-demo.yaml
