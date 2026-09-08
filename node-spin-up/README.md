@@ -18,6 +18,36 @@ Remember:
 -----------
 "Namespaces are for organizing WHAT runs, not WHO can run it."
 
+**Namespace** = a way to **separate and organize resources inside one Kubernetes cluster**.
+
+Think of it like **folders**:
+----------------------------
+
+```text
+Kubernetes Cluster
+├── default
+│   ├── vpa-demo
+│   └── my-app
+│
+├── kube-system
+│   ├── CoreDNS
+│   └── VPA
+│
+└── testing
+    └── test-pod
+```
+
+So, **Namespace = separate area/folder for Kubernetes resources.**
+
+Example:
+
+```bash
+kubectl get pods -n kube-system
+```
+
+means: **show Pods inside the `kube-system` namespace.**
+
+----------------------------------------------------------------------------------------------------------------------------------------------------
 
 # NODE SPIN-UP
 
