@@ -1,0 +1,49 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: developer-resources-role
+  namespace: rbac-poc
+
+rules:
+  # Pods
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+
+  # Deployments
+  - apiGroups: ["apps"] # Deployment belongs to the apps API group
+    resources: ["deployments"]
+    verbs: ["get", "list", "create", "update", "delete"]
+
+  # Services
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list"]
+
+  # ConfigMaps
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "create", "update", "delete"]
+
+  # Secrets - read only
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list"]
+
+
+# One correction to keep in your head: apiGroups: [""] means the core API group, which contains things like Pods, Services, ConfigMaps and Secrets.
+
+
+# Deep Dive into apiGroups:
+# ------------------------
+# Core Resources	   apiGroups       "" (empty)
+# "Core" resources are the fundamental/built-in Kubernetes objects that have been available since the very beginning of Kubernetes.
+
+# Other API Groups:
+# Apps Resources	apiGroups         apps        apps (Deployments)
+# batch (Jobs), networking.k8s.io (Ingress)
+
+# Summary
+# apiGroups: [""] = Permission for Kubernetes' core/built-in resources that 
+# don't need a group name specified (pods, services, secrets, configmaps, etc.).
+

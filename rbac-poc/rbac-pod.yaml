@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rbac-test-pod
+  namespace: rbac-poc
+spec:
+  serviceAccountName: developer # This Pod runs using the permissions of the developer ServiceAccount.
+  containers:
+    - name: test
+      image: nginx
