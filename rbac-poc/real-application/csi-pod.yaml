@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: csi-demo-pod
+  namespace: admission-poc
+spec:
+  containers:
+    - name: app
+      image: nginx
+      volumeMounts:
+        - name: storage
+          mountPath: /data
+  volumes:
+    - name: storage
+      persistentVolumeClaim:
+        claimName: csi-demo-pvc
+
+# Think of it like this:
+# 1. Normal Kubernetes storage
+# Kubernetes
+#  ├── PVC
+#  └── PV ─────────→ actual storage
+
+# The PV is just the Kubernetes record/configuration. The actual files are somewhere on the node/storage backend.
+
+# 2. External storage + CSI
+# Suppose you use AWS EBS, NFS, Ceph, etc.:
+# Kubernetes                         External storage
+# -----------                        ----------------
+# PVC
+#  ↓
+# StorageClass
+#  ↓
+# CSI Driver  ───────────────────→  Actual disk/storage
+#  ↓
+# PV
+# There are NOT two copies of the data.
+
+# You don't have:
+# Kubernetes storage #1
+# +
+# External storage #2
+
+# Instead:
+# Kubernetes has objects that describe/manage the storage, while the actual data lives in the storage backend.
+

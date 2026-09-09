@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sidecar-demo
+  namespace: admission-poc
+spec:
+  containers:
+  - name: app
+    image: nginx
+
+  - name: sidecar
+    image: busybox
+    command: ["sh", "-c", "while true; do echo 'sidecar running'; sleep 5; done"]
+
+# In your specific YAML file, you have successfully configured a multi-container Pod featuring the Sidecar pattern
+# 1. The Main Application Container (app): Runs the nginx image. This is your core service (e.g., serving a web page or API).
+# 2. The Sidecar Container (sidecar): Runs a lightweight busybox image. It executes a continuous loop (while true) that prints "sidecar running" to the logs every 5 seconds
+
+
+# name: sidecar is just the container name. We could write:
+# - name: helper
+#   image: busybox
+# Kubernetes would still create two containers.
+
+# So how do we call it a sidecar?
+# Based on its role, not its name.
+
+# If one container is the main application and another container runs alongside it to support the application, we call the second one a sidecar container.
+
+# Kubernetes basically sees:
+# Pod
+#  ├── Container 1
+#  └── Container 2
+
+# It doesn't inherently say:
+# Container 2 = sidecar
+
+# The architecture/design makes it a sidecar.
